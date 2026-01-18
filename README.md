@@ -112,6 +112,23 @@ Planned features for future development:
 - **Dynamic DNS Service** - Simple IP monitoring with automatic updates to Cloudflare and other DNS providers when your external IP changes
 - **Network Tunnel Support** - Easy configuration for tunneling solutions (Cloudflare Tunnel, etc.) enabling proxy access without port forwarding
 
+### Platform Integrations
+Deep integration with popular home server and container platforms to streamline service discovery and route configuration:
+
+| Platform | Capabilities |
+|----------|--------------|
+| **Docker** | Auto-discover containers, read labels for routing hints, monitor container health |
+| **Portainer** | Connect to Portainer API to list and manage services across environments |
+| **Kubernetes** | Discover services and ingresses, sync route configuration with cluster state |
+| **TrueNAS Scale** | List installed apps and services, detect exposed ports and endpoints |
+| **Unraid** | Discover Docker containers and VMs, integrate with Unraid's app ecosystem |
+
+For all platforms:
+- Automatic service discovery and listing within the management UI
+- Connectivity testing to verify services are reachable before creating routes
+- Live service preview to inspect responses without configuring a full route
+- One-click route creation with sensible defaults based on service metadata
+
 ### Desktop Integration
 - **Native Desktop Client** - Lightweight desktop application for quickly proxying local services, managing routes, and monitoring traffic without opening a browser
 
