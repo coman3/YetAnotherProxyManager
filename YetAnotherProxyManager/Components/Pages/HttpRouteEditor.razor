@@ -1,6 +1,8 @@
 @page "/routes/http/new"
 @page "/routes/http/{Id:guid}"
 @inject ConfigurationService ConfigService
+@inject ServiceManager ServiceManager
+@inject RouteValidationService ValidationService
 @inject AcmeCertificateService AcmeService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -10,139 +12,233 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">@(_isNew ? "New HTTP Route" : "Edit HTTP Route")</MudText>
 
-<MudPaper Class="pa-4">
-    <MudForm @ref="_form" @bind-IsValid="_isValid">
-        <MudGrid>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_route.Name" Label="Route Name" Required="true"
-                              RequiredError="Name is required" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudSwitch @bind-Value="_route.Enabled" Label="Enabled" Color="Color.Success" />
-            </MudItem>
+<MudGrid>
+    <!-- Configuration Column (7 cols) -->
+    <MudItem xs="12" lg="7">
+        <MudPaper Class="pa-4">
+            <MudForm @ref="_form" @bind-IsValid="_isValid">
+                <!-- Basic Info -->
+                <MudText Typo="Typo.h6" Class="mb-3">Basic Information</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudTextField @bind-Value="_route.Name" Label="Route Name" Required="true"
+                                      RequiredError="Name is required" Variant="Variant.Outlined"
+                                      Immediate="true" TextChanged="OnConfigChanged" />
+                    </MudItem>
+                    <MudItem xs="12" md="4" Class="d-flex align-center">
+                        <MudSwitch @bind-Value="_route.Enabled" Label="Enabled" Color="Color.Success" />
+                    </MudItem>
+                </MudGrid>
 
-            <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mb-2">Host Matching</MudText>
-            </MudItem>
+                <MudDivider Class="my-4" />
 
-            <MudItem xs="12">
-                <MudTextField @bind-Value="_hostsInput" Label="Hosts (comma-separated)" Variant="Variant.Outlined"
-                              HelperText="e.g., example.com, www.example.com" Required="true"
-                              RequiredError="At least one host is required" />
-            </MudItem>
+                <!-- Host Matching -->
+                <MudText Typo="Typo.h6" Class="mb-3">Host Matching</MudText>
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_hostsInput" Label="Hosts (comma-separated)" Variant="Variant.Outlined"
+                                      HelperText="e.g., example.com, www.example.com" Required="true"
+                                      RequiredError="At least one host is required" Immediate="true"
+                                      TextChanged="OnHostsChanged" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_httpConfig.PathPrefix" Label="Path Prefix (optional)" Variant="Variant.Outlined"
+                                      HelperText="e.g., /api (leave empty to match all paths)" Immediate="true"
+                                      TextChanged="OnConfigChanged" />
+                    </MudItem>
+                </MudGrid>
 
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_httpConfig.PathPrefix" Label="Path Prefix (optional)" Variant="Variant.Outlined"
-                              HelperText="e.g., /api (leave empty to match all paths)" />
-            </MudItem>
+                <MudDivider Class="my-4" />
 
-            <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mb-2 mt-4">Upstream Servers</MudText>
-            </MudItem>
+                <!-- Upstream Servers -->
+                <MudText Typo="Typo.h6" Class="mb-3">Upstream Servers</MudText>
 
-            @for (int i = 0; i < _httpConfig.Upstreams.Count; i++)
-            {
-                var index = i;
-                <MudItem xs="12" md="8">
-                    <MudTextField @bind-Value="_httpConfig.Upstreams[index].Address" Label="@($"Upstream {index + 1} Address")"
-                                  Variant="Variant.Outlined" HelperText="e.g., http://localhost:3000" Required="true" />
-                </MudItem>
-                <MudItem xs="12" md="2">
-                    <MudNumericField @bind-Value="_httpConfig.Upstreams[index].Weight" Label="Weight" Min="1" Max="100"
-                                     Variant="Variant.Outlined" />
-                </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-center">
-                    @if (_httpConfig.Upstreams.Count > 1)
-                    {
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                                       OnClick="@(() => RemoveUpstream(index))" />
-                    }
-                </MudItem>
-            }
+                <!-- Service Selector -->
+                <ServiceSelector OnUpstreamAdded="AddUpstreamFromService" />
 
-            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mt-4 mb-2">Configured Upstreams</MudText>
+
+                @for (int i = 0; i < _httpConfig.Upstreams.Count; i++)
+                {
+                    var index = i;
+                    var upstream = _httpConfig.Upstreams[index];
+                    var (serviceName, endpointName) = ServiceManager.GetServiceEndpointNames(upstream.ServiceId, upstream.ServiceEndpointId);
+
+                    <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
+                        <MudGrid>
+                            <MudItem xs="12" md="7">
+                                <MudTextField @bind-Value="_httpConfig.Upstreams[index].Address"
+                                              Label="@($"Upstream {index + 1} Address")"
+                                              Variant="Variant.Outlined" HelperText="e.g., http://localhost:3000"
+                                              Required="true" Immediate="true" TextChanged="OnConfigChanged" />
+                                @if (!string.IsNullOrEmpty(serviceName))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                        Linked to: @serviceName / @endpointName
+                                    </MudText>
+                                }
+                            </MudItem>
+                            <MudItem xs="6" md="2">
+                                <MudNumericField @bind-Value="_httpConfig.Upstreams[index].Weight" Label="Weight"
+                                                 Min="1" Max="100" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="6" md="3" Class="d-flex align-center justify-end gap-2">
+                                <MudSwitch @bind-Value="_httpConfig.Upstreams[index].Enabled"
+                                           Color="Color.Success" Size="Size.Small" />
+                                @if (_httpConfig.Upstreams.Count > 1)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                   Size="Size.Small" OnClick="@(() => RemoveUpstream(index))" />
+                                }
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                }
+
                 <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="AddUpstream">
-                    Add Upstream
+                           OnClick="AddUpstream" Class="mt-2">
+                    Add Upstream Manually
                 </MudButton>
-            </MudItem>
 
-            <MudItem xs="12" md="6">
-                <MudSelect @bind-Value="_httpConfig.LoadBalancing" Label="Load Balancing" Variant="Variant.Outlined">
-                    <MudSelectItem Value="LoadBalancingPolicy.RoundRobin">Round Robin</MudSelectItem>
-                    <MudSelectItem Value="LoadBalancingPolicy.Random">Random</MudSelectItem>
-                    <MudSelectItem Value="LoadBalancingPolicy.LeastRequests">Least Requests</MudSelectItem>
-                    <MudSelectItem Value="LoadBalancingPolicy.PowerOfTwoChoices">Power of Two Choices</MudSelectItem>
-                </MudSelect>
-            </MudItem>
+                <MudGrid Class="mt-3">
+                    <MudItem xs="12" md="6">
+                        <MudSelect @bind-Value="_httpConfig.LoadBalancing" Label="Load Balancing" Variant="Variant.Outlined">
+                            <MudSelectItem Value="LoadBalancingPolicy.RoundRobin">Round Robin</MudSelectItem>
+                            <MudSelectItem Value="LoadBalancingPolicy.Random">Random</MudSelectItem>
+                            <MudSelectItem Value="LoadBalancingPolicy.LeastRequests">Least Requests</MudSelectItem>
+                            <MudSelectItem Value="LoadBalancingPolicy.PowerOfTwoChoices">Power of Two Choices</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
 
-            <MudItem xs="12" md="6">
-                <MudNumericField @bind-Value="_httpConfig.TimeoutSeconds" Label="Timeout (seconds)" Min="1" Max="3600"
-                                 Variant="Variant.Outlined" HelperText="Leave empty for default" />
-            </MudItem>
+                <MudDivider Class="my-4" />
 
-            <MudItem xs="12">
-                <MudText Typo="Typo.h6" Class="mb-2 mt-4">SSL Configuration</MudText>
-            </MudItem>
+                <!-- SSL Configuration -->
+                <SslConfigurationPanel @bind-SslMode="_httpConfig.SslMode"
+                                       @bind-ForceHttps="_httpConfig.ForceHttps"
+                                       @bind-CustomCertificateId="_httpConfig.CustomCertificateId"
+                                       Hosts="@_parsedHosts" />
 
-            <MudItem xs="12" md="6">
-                <MudSelect T="SslMode" Value="_httpConfig.SslMode" ValueChanged="OnSslModeChanged" Label="SSL Mode" Variant="Variant.Outlined">
-                    <MudSelectItem Value="SslMode.None">None (HTTP only)</MudSelectItem>
-                    <MudSelectItem Value="SslMode.LetsEncrypt">Let's Encrypt (Auto)</MudSelectItem>
-                    <MudSelectItem Value="SslMode.Custom">Custom Certificate</MudSelectItem>
-                </MudSelect>
-            </MudItem>
+                <!-- Advanced Options -->
+                <MudExpansionPanels Class="mt-4">
+                    <MudExpansionPanel Text="Advanced Options" Icon="@Icons.Material.Filled.Settings">
+                        <MudGrid>
+                            <MudItem xs="12" md="6">
+                                <MudNumericField @bind-Value="_httpConfig.TimeoutSeconds" Label="Request Timeout (seconds)"
+                                                 Min="1" Max="3600" Variant="Variant.Outlined"
+                                                 HelperText="Leave empty for default (100s)" />
+                            </MudItem>
 
-            <MudItem xs="12" md="6">
-                <MudSwitch @bind-Value="_httpConfig.ForceHttps" Label="Force HTTPS Redirect" Color="Color.Success"
-                           Disabled="@(_httpConfig.SslMode == SslMode.None)" />
-            </MudItem>
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Advanced Timeouts</MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudNumericField @bind-Value="_connectTimeout" Label="Connect Timeout (s)"
+                                                 Min="1" Max="300" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudNumericField @bind-Value="_requestTimeout" Label="Request Timeout (s)"
+                                                 Min="1" Max="3600" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudNumericField @bind-Value="_responseTimeout" Label="Response Timeout (s)"
+                                                 Min="1" Max="3600" Variant="Variant.Outlined" />
+                            </MudItem>
 
-            @if (_httpConfig.SslMode == SslMode.LetsEncrypt && !_isAcmeConfigured)
-            {
-                <MudItem xs="12">
-                    <MudAlert Severity="Severity.Warning" Class="mb-2">
-                        <MudText>ACME email is not configured. You need to configure it before requesting Let's Encrypt certificates.</MudText>
-                        <MudTextField @bind-Value="_acmeEmail" Label="ACME Email" Variant="Variant.Outlined" Class="mt-2"
-                                      HelperText="Email for Let's Encrypt notifications" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" OnClick="SaveAcmeEmail"
-                                   Disabled="@string.IsNullOrWhiteSpace(_acmeEmail)">
-                            Save Email
-                        </MudButton>
-                    </MudAlert>
-                </MudItem>
-            }
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2 mt-3">Retry Policy</MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudSwitch @bind-Value="_retryEnabled" Label="Enable Retries" Color="Color.Primary" />
+                            </MudItem>
+                            @if (_retryEnabled)
+                            {
+                                <MudItem xs="12" md="4">
+                                    <MudNumericField @bind-Value="_maxRetries" Label="Max Retries"
+                                                     Min="1" Max="10" Variant="Variant.Outlined" />
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudTextField @bind-Value="_retryStatusCodes" Label="Retry on Status Codes"
+                                                  Variant="Variant.Outlined" HelperText="e.g., 502, 503, 504" />
+                                </MudItem>
+                            }
 
-            @if (_httpConfig.SslMode == SslMode.Custom)
-            {
-                <MudItem xs="12" md="6">
-                    <MudSelect @bind-Value="_httpConfig.CustomCertificateId" Label="Certificate" Variant="Variant.Outlined">
-                        @foreach (var cert in _certificates)
+                            <!-- Filter Rules Link -->
+                            @if (!_isNew)
+                            {
+                                <MudItem xs="12" Class="mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                                               StartIcon="@Icons.Material.Filled.FilterAlt"
+                                               Href="@($"routes/{_route.Id}/filters")">
+                                        Configure Filter Rules
+                                    </MudButton>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+
+                <!-- Action Buttons -->
+                <div class="d-flex gap-2 mt-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                               Disabled="@(!_isValid || _isSaving)">
+                        @if (_isSaving)
                         {
-                            <MudSelectItem Value="@((Guid?)cert.Id)">@cert.Name (@string.Join(", ", cert.Domains))</MudSelectItem>
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            @_savingStatus
                         }
-                    </MudSelect>
-                </MudItem>
+                        else
+                        {
+                            @(_isNew ? "Create Route" : "Save Changes")
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" OnClick="Cancel" Disabled="@_isSaving">Cancel</MudButton>
+                </div>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Live Preview Column (5 cols) -->
+    <MudItem xs="12" lg="5">
+        <RoutePreviewPanel Route="@_route" Hosts="@_parsedHosts" ValidationResult="@_validationResult" />
+
+        <!-- Validation Messages -->
+        @if (_validationResult != null)
+        {
+            @if (_validationResult.Errors.Any())
+            {
+                <MudPaper Class="pa-3 mt-3" Elevation="2">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Error" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                        Validation Errors
+                    </MudText>
+                    @foreach (var error in _validationResult.Errors)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">
+                            @error.Field: @error.Message
+                        </MudText>
+                    }
+                </MudPaper>
             }
 
-            <MudItem xs="12" Class="d-flex gap-2 mt-4">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
-                           Disabled="@(!_isValid || _isSaving || (_httpConfig.SslMode == SslMode.LetsEncrypt && !_isAcmeConfigured))">
-                    @if (_isSaving)
+            @if (_validationResult.Warnings.Any())
+            {
+                <MudPaper Class="pa-3 mt-3" Elevation="2">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Warning" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Class="mr-1" />
+                        Warnings
+                    </MudText>
+                    @foreach (var warning in _validationResult.Warnings)
                     {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        @_savingStatus
+                        <MudText Typo="Typo.body2" Color="Color.Warning">
+                            @warning.Field: @warning.Message
+                        </MudText>
                     }
-                    else
-                    {
-                        @(_isNew ? "Create Route" : "Save Changes")
-                    }
-                </MudButton>
-                <MudButton Variant="Variant.Outlined" OnClick="Cancel" Disabled="@_isSaving">Cancel</MudButton>
-            </MudItem>
-        </MudGrid>
-    </MudForm>
-</MudPaper>
+                </MudPaper>
+            }
+        }
+    </MudItem>
+</MudGrid>
 
 @code {
     [Parameter]
@@ -151,22 +247,26 @@
     private ProxyRoute _route = new() { Type = RouteType.Http };
     private HttpRouteConfig _httpConfig = new();
     private string _hostsInput = "";
+    private List<string> _parsedHosts = new();
     private bool _isNew = true;
     private bool _isValid;
     private MudForm? _form;
-    private List<Certificate> _certificates = new();
-    private bool _isAcmeConfigured;
-    private string _acmeEmail = "";
     private bool _isSaving;
     private string _savingStatus = "";
+    private ValidationResult? _validationResult;
+
+    // Advanced timeout fields
+    private int? _connectTimeout;
+    private int? _requestTimeout;
+    private int? _responseTimeout;
+
+    // Retry policy fields
+    private bool _retryEnabled;
+    private int _maxRetries = 3;
+    private string _retryStatusCodes = "502, 503, 504";
 
     protected override void OnInitialized()
     {
-        _certificates = ConfigService.GetAllCertificates().ToList();
-        var settings = ConfigService.GetSettings();
-        _isAcmeConfigured = !string.IsNullOrEmpty(settings.AcmeEmail);
-        _acmeEmail = settings.AcmeEmail ?? "";
-
         if (Id.HasValue)
         {
             var existing = ConfigService.GetRoute(Id.Value);
@@ -175,7 +275,24 @@
                 _route = existing;
                 _httpConfig = existing.HttpConfig ?? new HttpRouteConfig();
                 _hostsInput = string.Join(", ", _httpConfig.Hosts);
+                _parsedHosts = _httpConfig.Hosts.ToList();
                 _isNew = false;
+
+                // Load advanced timeouts
+                if (_httpConfig.AdvancedTimeouts != null)
+                {
+                    _connectTimeout = _httpConfig.AdvancedTimeouts.ConnectTimeoutSeconds;
+                    _requestTimeout = _httpConfig.AdvancedTimeouts.RequestTimeoutSeconds;
+                    _responseTimeout = _httpConfig.AdvancedTimeouts.ResponseTimeoutSeconds;
+                }
+
+                // Load retry policy
+                if (_httpConfig.RetryPolicy != null)
+                {
+                    _retryEnabled = _httpConfig.RetryPolicy.Enabled;
+                    _maxRetries = _httpConfig.RetryPolicy.MaxRetries;
+                    _retryStatusCodes = string.Join(", ", _httpConfig.RetryPolicy.RetryOnStatusCodes);
+                }
             }
         }
 
@@ -183,34 +300,42 @@
         {
             _httpConfig.Upstreams.Add(new UpstreamServer());
         }
+
+        _route.HttpConfig = _httpConfig;
+        RunValidation();
     }
 
-    private void OnSslModeChanged(SslMode newMode)
+    private void OnHostsChanged(string value)
     {
-        _httpConfig.SslMode = newMode;
-
-        if (newMode == SslMode.LetsEncrypt)
-        {
-            _httpConfig.ForceHttps = true;
-        }
+        _hostsInput = value;
+        _parsedHosts = _hostsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        _httpConfig.Hosts = _parsedHosts;
+        OnConfigChanged(null);
     }
 
-    private void SaveAcmeEmail()
+    private void OnConfigChanged(string? _)
     {
-        if (string.IsNullOrWhiteSpace(_acmeEmail))
-            return;
-
-        var settings = ConfigService.GetSettings();
-        settings.AcmeEmail = _acmeEmail;
-        ConfigService.SaveSettings(settings);
-        _isAcmeConfigured = true;
-        Snackbar.Add("ACME email saved", Severity.Success);
+        _route.HttpConfig = _httpConfig;
+        RunValidation();
         StateHasChanged();
+    }
+
+    private void RunValidation()
+    {
+        _validationResult = ValidationService.ValidateRoute(_route, _isNew);
     }
 
     private void AddUpstream()
     {
         _httpConfig.Upstreams.Add(new UpstreamServer());
+        OnConfigChanged(null);
+    }
+
+    private void AddUpstreamFromService(UpstreamServer upstream)
+    {
+        _httpConfig.Upstreams.Add(upstream);
+        OnConfigChanged(null);
+        Snackbar.Add($"Added upstream from service", Severity.Success);
     }
 
     private void RemoveUpstream(int index)
@@ -218,13 +343,63 @@
         if (_httpConfig.Upstreams.Count > 1)
         {
             _httpConfig.Upstreams.RemoveAt(index);
+            OnConfigChanged(null);
         }
     }
 
     private async Task Save()
     {
+        // Parse hosts
         _httpConfig.Hosts = _hostsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        // Build advanced timeouts if any are set
+        if (_connectTimeout.HasValue || _requestTimeout.HasValue || _responseTimeout.HasValue)
+        {
+            _httpConfig.AdvancedTimeouts = new AdvancedTimeoutConfig
+            {
+                ConnectTimeoutSeconds = _connectTimeout,
+                RequestTimeoutSeconds = _requestTimeout,
+                ResponseTimeoutSeconds = _responseTimeout
+            };
+        }
+        else
+        {
+            _httpConfig.AdvancedTimeouts = null;
+        }
+
+        // Build retry policy
+        if (_retryEnabled)
+        {
+            var statusCodes = _retryStatusCodes
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out var code) ? code : 0)
+                .Where(c => c > 0)
+                .ToList();
+
+            _httpConfig.RetryPolicy = new RetryPolicyConfig
+            {
+                Enabled = true,
+                MaxRetries = _maxRetries,
+                RetryOnStatusCodes = statusCodes.Count > 0 ? statusCodes : new List<int> { 502, 503, 504 }
+            };
+        }
+        else
+        {
+            _httpConfig.RetryPolicy = null;
+        }
+
         _route.HttpConfig = _httpConfig;
+
+        // Final validation
+        var validation = ValidationService.ValidateRoute(_route, _isNew);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                Snackbar.Add($"{error.Field}: {error.Message}", Severity.Error);
+            }
+            return;
+        }
 
         // If Let's Encrypt is selected, check if we need to create certificates
         if (_httpConfig.SslMode == SslMode.LetsEncrypt && _httpConfig.Hosts.Count > 0)
@@ -276,11 +451,11 @@
 
         ConfigService.SaveRoute(_route);
         Snackbar.Add($"Route saved: {_route.Name}", Severity.Success);
-        Navigation.NavigateTo("/routes");
+        Navigation.NavigateTo("routes");
     }
 
     private void Cancel()
     {
-        Navigation.NavigateTo("/routes");
+        Navigation.NavigateTo("routes");
     }
 }

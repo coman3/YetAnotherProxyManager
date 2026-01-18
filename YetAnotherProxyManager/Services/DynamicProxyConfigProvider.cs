@@ -8,13 +8,18 @@ namespace YetAnotherProxyManager.Services;
 public class DynamicProxyConfigProvider : IProxyConfigProvider, IDisposable
 {
     private readonly ConfigurationService _configService;
+    private readonly ServiceManager _serviceManager;
     private readonly ILogger<DynamicProxyConfigProvider> _logger;
     private CancellationTokenSource _changeTokenSource = new();
     private IProxyConfig _config;
 
-    public DynamicProxyConfigProvider(ConfigurationService configService, ILogger<DynamicProxyConfigProvider> logger)
+    public DynamicProxyConfigProvider(
+        ConfigurationService configService,
+        ServiceManager serviceManager,
+        ILogger<DynamicProxyConfigProvider> logger)
     {
         _configService = configService;
+        _serviceManager = serviceManager;
         _logger = logger;
         _config = BuildConfig();
 
@@ -66,9 +71,18 @@ public class DynamicProxyConfigProvider : IProxyConfigProvider, IDisposable
                 var upstream = route.HttpConfig.Upstreams[i];
                 if (!upstream.Enabled) continue;
 
+                // Resolve address from service if referenced, otherwise use direct address
+                var address = _serviceManager.ResolveUpstreamAddress(upstream);
+                if (string.IsNullOrEmpty(address))
+                {
+                    _logger.LogWarning("Skipping upstream {Index} for route {Name}: unable to resolve address",
+                        i, route.Name);
+                    continue;
+                }
+
                 destinations[$"dest-{i}"] = new DestinationConfig
                 {
-                    Address = upstream.Address
+                    Address = address
                 };
             }
 

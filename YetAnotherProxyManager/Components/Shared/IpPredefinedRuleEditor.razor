@@ -1,0 +1,15 @@
+<MudSelect @bind-Value="Rule.IpPredefinedConfig!.Rule" Label="Predefined Rule" Variant="Variant.Outlined">
+    <MudSelectItem Value="PredefinedIpRule.LocalOnly">Local Network Only (loopback, private, link-local)</MudSelectItem>
+    <MudSelectItem Value="PredefinedIpRule.PrivateOnly">Private IPs Only (RFC 1918)</MudSelectItem>
+    <MudSelectItem Value="PredefinedIpRule.PublicOnly">Public IPs Only</MudSelectItem>
+</MudSelect>
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        Rule.IpPredefinedConfig ??= new IpPredefinedConfig { Rule = PredefinedIpRule.LocalOnly };
+    }
+}

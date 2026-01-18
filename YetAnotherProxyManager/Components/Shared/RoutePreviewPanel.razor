@@ -1,0 +1,243 @@
+@inject ServiceManager ServiceManager
+@inject ConfigurationService ConfigService
+
+<MudPaper Class="pa-4" Elevation="2" Style="position: sticky; top: 16px;">
+    <MudText Typo="Typo.h6" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Preview" Class="mr-2" Size="Size.Small" />
+        Live Preview
+    </MudText>
+
+    @if (Route?.HttpConfig != null)
+    {
+        <div class="preview-section">
+            <!-- Protocol Badge -->
+            <div class="d-flex align-center mb-3">
+                @if (Route.HttpConfig.SslMode != SslMode.None)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Lock">
+                        HTTPS
+                    </MudChip>
+                    @if (Route.HttpConfig.ForceHttps)
+                    {
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="ml-2">
+                            Redirect HTTP
+                        </MudChip>
+                    }
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.LockOpen">
+                        HTTP Only
+                    </MudChip>
+                }
+            </div>
+
+            <!-- Hosts -->
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Incoming Requests</MudText>
+            <div class="my-2">
+                @if (Hosts.Any())
+                {
+                    @foreach (var host in Hosts.Take(5))
+                    {
+                        <MudText Typo="Typo.body1" Class="font-weight-medium">
+                            @(Route.HttpConfig.SslMode != SslMode.None ? "https" : "http")://@host@(!string.IsNullOrEmpty(Route.HttpConfig.PathPrefix) ? Route.HttpConfig.PathPrefix : "/*")
+                        </MudText>
+                    }
+                    @if (Hosts.Count() > 5)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">+@(Hosts.Count() - 5) more hosts</MudText>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Warning">No hosts configured (matches all)</MudText>
+                }
+            </div>
+
+            <!-- Arrow -->
+            <div class="d-flex justify-center my-3">
+                <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Primary" Size="Size.Large" />
+            </div>
+
+            <!-- Upstreams -->
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Upstream Servers</MudText>
+            <div class="my-2">
+                @if (Route.HttpConfig.Upstreams.Any(u => u.Enabled))
+                {
+                    var enabledUpstreams = Route.HttpConfig.Upstreams.Where(u => u.Enabled).ToList();
+                    var totalWeight = enabledUpstreams.Sum(u => u.Weight);
+
+                    @foreach (var upstream in enabledUpstreams)
+                    {
+                        var address = GetResolvedAddress(upstream);
+                        var percentage = totalWeight > 0 ? (upstream.Weight * 100 / totalWeight) : 0;
+                        var (serviceName, endpointName) = GetServiceInfo(upstream);
+
+                        <div class="d-flex align-center justify-space-between mb-1">
+                            <div>
+                                <MudText Typo="Typo.body2">@address</MudText>
+                                @if (!string.IsNullOrEmpty(serviceName))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                        via @serviceName@(!string.IsNullOrEmpty(endpointName) ? $" / {endpointName}" : "")
+                                    </MudText>
+                                }
+                            </div>
+                            @if (enabledUpstreams.Count > 1)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">@percentage%</MudChip>
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error">No enabled upstreams</MudText>
+                }
+            </div>
+
+            <!-- Load Balancing -->
+            @if (Route.HttpConfig.Upstreams.Count(u => u.Enabled) > 1)
+            {
+                <MudDivider Class="my-3" />
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Balance" Size="Size.Small" Class="mr-2" Color="Color.Secondary" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @GetLoadBalancingDescription(Route.HttpConfig.LoadBalancing)
+                    </MudText>
+                </div>
+            }
+
+            <!-- SSL Certificate Status -->
+            @if (Route.HttpConfig.SslMode != SslMode.None)
+            {
+                <MudDivider Class="my-3" />
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@GetCertificateIcon()" Size="Size.Small" Class="mr-2"
+                             Color="@GetCertificateColor()" />
+                    <MudText Typo="Typo.body2" Color="@GetCertificateColor()">
+                        @GetCertificateStatus()
+                    </MudText>
+                </div>
+            }
+
+            <!-- Timeout Info -->
+            @if (Route.HttpConfig.TimeoutSeconds.HasValue)
+            {
+                <MudDivider Class="my-3" />
+                <div class="d-flex align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" Class="mr-2" Color="Color.Secondary" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Timeout: @Route.HttpConfig.TimeoutSeconds.Value seconds
+                    </MudText>
+                </div>
+            }
+
+            <!-- Validation Status -->
+            @if (ValidationResult != null && !ValidationResult.IsValid)
+            {
+                <MudDivider Class="my-3" />
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                    @ValidationResult.Errors.Count error(s) found
+                </MudAlert>
+            }
+            @if (ValidationResult?.Warnings.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                    @ValidationResult.Warnings.Count warning(s)
+                </MudAlert>
+            }
+        </div>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Configure your route to see a preview
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public ProxyRoute? Route { get; set; }
+
+    [Parameter]
+    public IEnumerable<string> Hosts { get; set; } = Enumerable.Empty<string>();
+
+    [Parameter]
+    public ValidationResult? ValidationResult { get; set; }
+
+    private string GetResolvedAddress(UpstreamServer upstream)
+    {
+        return ServiceManager.ResolveUpstreamAddress(upstream);
+    }
+
+    private (string? ServiceName, string? EndpointName) GetServiceInfo(UpstreamServer upstream)
+    {
+        return ServiceManager.GetServiceEndpointNames(upstream.ServiceId, upstream.ServiceEndpointId);
+    }
+
+    private string GetLoadBalancingDescription(LoadBalancingPolicy policy) => policy switch
+    {
+        LoadBalancingPolicy.RoundRobin => "Round Robin distribution",
+        LoadBalancingPolicy.Random => "Random selection",
+        LoadBalancingPolicy.LeastRequests => "Least requests routing",
+        LoadBalancingPolicy.PowerOfTwoChoices => "Power of two choices",
+        _ => "Default routing"
+    };
+
+    private string GetCertificateIcon()
+    {
+        if (Route?.HttpConfig?.SslMode == SslMode.LetsEncrypt)
+            return Icons.Material.Filled.Autorenew;
+        return Icons.Material.Filled.VerifiedUser;
+    }
+
+    private Color GetCertificateColor()
+    {
+        if (Route?.HttpConfig == null) return Color.Default;
+
+        if (Route.HttpConfig.SslMode == SslMode.Custom && !Route.HttpConfig.CustomCertificateId.HasValue)
+            return Color.Error;
+
+        if (Route.HttpConfig.SslMode == SslMode.LetsEncrypt)
+        {
+            // Check if certificates exist for hosts
+            foreach (var host in Hosts)
+            {
+                var cert = ConfigService.GetCertificateByDomain(host);
+                if (cert == null)
+                    return Color.Warning;
+            }
+        }
+
+        return Color.Success;
+    }
+
+    private string GetCertificateStatus()
+    {
+        if (Route?.HttpConfig == null) return "";
+
+        switch (Route.HttpConfig.SslMode)
+        {
+            case SslMode.LetsEncrypt:
+                var missingDomains = Hosts.Where(h => ConfigService.GetCertificateByDomain(h) == null).ToList();
+                if (missingDomains.Any())
+                    return $"Will request certificate for: {string.Join(", ", missingDomains)}";
+                return "Let's Encrypt certificate active";
+
+            case SslMode.Custom:
+                if (!Route.HttpConfig.CustomCertificateId.HasValue)
+                    return "No certificate selected";
+                var cert = ConfigService.GetCertificate(Route.HttpConfig.CustomCertificateId.Value);
+                if (cert == null)
+                    return "Certificate not found";
+                if (cert.ExpiresAt.HasValue)
+                    return $"Expires: {cert.ExpiresAt.Value:MMM dd, yyyy}";
+                return "Custom certificate";
+
+            default:
+                return "";
+        }
+    }
+}

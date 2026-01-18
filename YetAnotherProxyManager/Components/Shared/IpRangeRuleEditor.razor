@@ -1,0 +1,20 @@
+<MudGrid Spacing="2">
+    <MudItem xs="6">
+        <MudTextField @bind-Value="Rule.IpRangeConfig!.StartIp" Label="Start IP"
+                      Variant="Variant.Outlined" Placeholder="10.0.0.1" />
+    </MudItem>
+    <MudItem xs="6">
+        <MudTextField @bind-Value="Rule.IpRangeConfig!.EndIp" Label="End IP"
+                      Variant="Variant.Outlined" Placeholder="10.0.0.255" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        Rule.IpRangeConfig ??= new IpRangeConfig();
+    }
+}

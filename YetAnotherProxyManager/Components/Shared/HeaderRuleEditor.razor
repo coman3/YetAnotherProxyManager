@@ -1,0 +1,24 @@
+<MudGrid Spacing="2">
+    <MudItem xs="4">
+        <MudTextField @bind-Value="Rule.HeaderConfig!.HeaderName" Label="Header Name"
+                      Variant="Variant.Outlined" Placeholder="e.g., X-API-Key" />
+    </MudItem>
+    <MudItem xs="5">
+        <MudTextField @bind-Value="Rule.HeaderConfig!.HeaderValue" Label="Header Value (optional)"
+                      Variant="Variant.Outlined"
+                      Placeholder="Leave empty to match any value" />
+    </MudItem>
+    <MudItem xs="3" Class="d-flex align-center">
+        <MudCheckBox @bind-Value="Rule.HeaderConfig!.UseRegex" Label="Use Regex" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        Rule.HeaderConfig ??= new HeaderConfig();
+    }
+}

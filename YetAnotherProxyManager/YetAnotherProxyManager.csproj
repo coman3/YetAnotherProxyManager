@@ -18,6 +18,7 @@
 
     <!-- Blazor UI Components -->
     <PackageReference Include="MudBlazor" Version="8.*" />
+    <PackageReference Include="Blazor-ApexCharts" Version="3.*" />
 
     <!-- Logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="9.*" />

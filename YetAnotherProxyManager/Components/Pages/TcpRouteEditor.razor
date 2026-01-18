@@ -97,11 +97,11 @@
         _route.StreamConfig = _streamConfig;
         ConfigService.SaveRoute(_route);
         Snackbar.Add($"TCP forward saved: {_route.Name}", Severity.Success);
-        Navigation.NavigateTo("/routes");
+        Navigation.NavigateTo("routes");
     }
 
     private void Cancel()
     {
-        Navigation.NavigateTo("/routes");
+        Navigation.NavigateTo("routes");
     }
 }

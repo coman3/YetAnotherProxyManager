@@ -1,0 +1,134 @@
+@inject ServiceManager ServiceManager
+
+<MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+    <div class="d-flex align-center mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Class="mr-2" />
+        <MudText Typo="Typo.subtitle2">Quick Add from Service</MudText>
+    </div>
+
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudSelect T="Guid?" Value="@_selectedServiceId" ValueChanged="OnServiceSelected"
+                       Label="Select Service" Variant="Variant.Outlined" Size="Size.Small"
+                       Placeholder="Choose a service...">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">-- Manual Configuration --</MudSelectItem>
+                @foreach (var service in _services.Where(s => s.Enabled))
+                {
+                    <MudSelectItem T="Guid?" Value="@service.Id">
+                        @service.Name (@service.BaseAddress)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        @if (_selectedServiceId.HasValue && _selectedService != null)
+        {
+            <MudItem xs="12" md="5">
+                <MudSelect T="Guid?" Value="@_selectedEndpointId" ValueChanged="OnEndpointSelected"
+                           Label="Select Endpoint" Variant="Variant.Outlined" Size="Size.Small">
+                    @foreach (var endpoint in _selectedService.Endpoints.Where(e => e.Enabled))
+                    {
+                        <MudSelectItem T="Guid?" Value="@endpoint.Id">
+                            @endpoint.Name (:@endpoint.Port)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="2" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           OnClick="AddFromService" Disabled="@(!_selectedEndpointId.HasValue)"
+                           StartIcon="@Icons.Material.Filled.Add" FullWidth="true">
+                    Add
+                </MudButton>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (_selectedServiceId.HasValue && _selectedService != null && _selectedEndpointId.HasValue)
+    {
+        var endpoint = _selectedService.Endpoints.FirstOrDefault(e => e.Id == _selectedEndpointId.Value);
+        if (endpoint != null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Will add: @($"{endpoint.Protocol}://{_selectedService.BaseAddress}:{endpoint.Port}")
+                @if (!string.IsNullOrEmpty(endpoint.PathPrefix))
+                {
+                    @($"/{endpoint.PathPrefix.TrimStart('/')}")
+                }
+            </MudText>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public EventCallback<UpstreamServer> OnUpstreamAdded { get; set; }
+
+    private List<Service> _services = new();
+    private Guid? _selectedServiceId;
+    private Guid? _selectedEndpointId;
+    private Service? _selectedService;
+
+    protected override void OnInitialized()
+    {
+        _services = ServiceManager.GetAllServices().Where(s => s.Enabled && s.Endpoints.Any(e => e.Enabled)).ToList();
+    }
+
+    private void OnServiceSelected(Guid? serviceId)
+    {
+        _selectedServiceId = serviceId;
+        _selectedEndpointId = null;
+
+        if (serviceId.HasValue)
+        {
+            _selectedService = _services.FirstOrDefault(s => s.Id == serviceId.Value);
+            // Auto-select first endpoint if only one
+            if (_selectedService?.Endpoints.Count(e => e.Enabled) == 1)
+            {
+                _selectedEndpointId = _selectedService.Endpoints.First(e => e.Enabled).Id;
+            }
+        }
+        else
+        {
+            _selectedService = null;
+        }
+    }
+
+    private void OnEndpointSelected(Guid? endpointId)
+    {
+        _selectedEndpointId = endpointId;
+    }
+
+    private async Task AddFromService()
+    {
+        if (!_selectedServiceId.HasValue || !_selectedEndpointId.HasValue || _selectedService == null)
+            return;
+
+        var endpoint = _selectedService.Endpoints.FirstOrDefault(e => e.Id == _selectedEndpointId.Value);
+        if (endpoint == null) return;
+
+        // Build the resolved address for display
+        var address = $"{endpoint.Protocol}://{_selectedService.BaseAddress}:{endpoint.Port}";
+        if (!string.IsNullOrEmpty(endpoint.PathPrefix))
+        {
+            address += $"/{endpoint.PathPrefix.TrimStart('/')}";
+        }
+
+        var upstream = new UpstreamServer
+        {
+            Address = address,
+            ServiceId = _selectedServiceId.Value,
+            ServiceEndpointId = _selectedEndpointId.Value,
+            Weight = 1,
+            Enabled = true
+        };
+
+        await OnUpstreamAdded.InvokeAsync(upstream);
+
+        // Reset selection
+        _selectedServiceId = null;
+        _selectedEndpointId = null;
+        _selectedService = null;
+    }
+}

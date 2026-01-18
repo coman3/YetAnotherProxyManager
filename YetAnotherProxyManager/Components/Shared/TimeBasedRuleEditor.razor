@@ -1,0 +1,66 @@
+<MudGrid Spacing="2">
+    <MudItem xs="12">
+        <MudSelect T="DayOfWeek" Label="Days of Week" MultiSelection="true"
+                   SelectedValues="_selectedDays" SelectedValuesChanged="OnDaysChanged"
+                   Variant="Variant.Outlined">
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Monday">Monday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Tuesday">Tuesday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Wednesday">Wednesday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Thursday">Thursday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Friday">Friday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Saturday">Saturday</MudSelectItem>
+            <MudSelectItem T="DayOfWeek" Value="DayOfWeek.Sunday">Sunday</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="6">
+        <MudTimePicker Label="Start Time" Time="_startTime" TimeChanged="OnStartTimeChanged"
+                       Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="6">
+        <MudTimePicker Label="End Time" Time="_endTime" TimeChanged="OnEndTimeChanged"
+                       Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Rule.TimeBasedConfig!.TimeZone" Label="Timezone (optional)"
+                      Variant="Variant.Outlined"
+                      Placeholder="e.g., America/New_York (default: UTC)" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    private IEnumerable<DayOfWeek> _selectedDays = new List<DayOfWeek>();
+    private TimeSpan? _startTime;
+    private TimeSpan? _endTime;
+
+    protected override void OnInitialized()
+    {
+        Rule.TimeBasedConfig ??= new TimeBasedConfig();
+        _selectedDays = Rule.TimeBasedConfig.DaysOfWeek;
+
+        if (Rule.TimeBasedConfig.StartTime.HasValue)
+            _startTime = Rule.TimeBasedConfig.StartTime.Value.ToTimeSpan();
+        if (Rule.TimeBasedConfig.EndTime.HasValue)
+            _endTime = Rule.TimeBasedConfig.EndTime.Value.ToTimeSpan();
+    }
+
+    private void OnDaysChanged(IEnumerable<DayOfWeek> values)
+    {
+        _selectedDays = values;
+        Rule.TimeBasedConfig!.DaysOfWeek = values.ToList();
+    }
+
+    private void OnStartTimeChanged(TimeSpan? value)
+    {
+        _startTime = value;
+        Rule.TimeBasedConfig!.StartTime = value.HasValue ? TimeOnly.FromTimeSpan(value.Value) : null;
+    }
+
+    private void OnEndTimeChanged(TimeSpan? value)
+    {
+        _endTime = value;
+        Rule.TimeBasedConfig!.EndTime = value.HasValue ? TimeOnly.FromTimeSpan(value.Value) : null;
+    }
+}

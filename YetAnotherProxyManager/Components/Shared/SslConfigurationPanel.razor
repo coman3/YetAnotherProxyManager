@@ -1,0 +1,236 @@
+@inject ConfigurationService ConfigService
+@inject ISnackbar Snackbar
+
+<div class="ssl-configuration-panel">
+    <MudText Typo="Typo.h6" Class="mb-3">SSL Configuration</MudText>
+
+    <MudGrid>
+        <!-- SSL Mode Cards -->
+        <MudItem xs="12" md="4">
+            <MudCard @onclick="@(() => SelectSslMode(SslMode.None))"
+                     Class="@GetCardClass(SslMode.None)" Style="cursor: pointer; height: 100%;">
+                <MudCardContent Class="text-center pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Large"
+                             Color="@(SslMode == SslMode.None ? Color.Primary : Color.Default)" />
+                    <MudText Typo="Typo.subtitle1" Class="mt-2 font-weight-medium">HTTP Only</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No encryption</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard @onclick="@(() => SelectSslMode(SslMode.LetsEncrypt))"
+                     Class="@GetCardClass(SslMode.LetsEncrypt)" Style="cursor: pointer; height: 100%;">
+                <MudCardContent Class="text-center pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.Autorenew" Size="Size.Large"
+                             Color="@(SslMode == SslMode.LetsEncrypt ? Color.Primary : Color.Default)" />
+                    <MudText Typo="Typo.subtitle1" Class="mt-2 font-weight-medium">Let's Encrypt</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Auto-renewed free SSL</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard @onclick="@(() => SelectSslMode(SslMode.Custom))"
+                     Class="@GetCardClass(SslMode.Custom)" Style="cursor: pointer; height: 100%;">
+                <MudCardContent Class="text-center pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Large"
+                             Color="@(SslMode == SslMode.Custom ? Color.Primary : Color.Default)" />
+                    <MudText Typo="Typo.subtitle1" Class="mt-2 font-weight-medium">Custom Certificate</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Your own certificate</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <!-- Force HTTPS Option -->
+        @if (SslMode != SslMode.None)
+        {
+            <MudItem xs="12">
+                <MudSwitch @bind-Value="ForceHttps" Label="Redirect HTTP to HTTPS"
+                           Color="Color.Success" Class="mt-2" />
+            </MudItem>
+        }
+
+        <!-- Let's Encrypt Configuration -->
+        @if (SslMode == SslMode.LetsEncrypt)
+        {
+            <MudItem xs="12">
+                @if (!_isAcmeConfigured)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-3">
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            ACME email is required for Let's Encrypt certificates.
+                        </MudText>
+                        <div class="d-flex gap-2 align-center">
+                            <MudTextField @bind-Value="_acmeEmail" Label="Email Address"
+                                          Variant="Variant.Outlined" Size="Size.Small" Class="flex-grow-1"
+                                          Placeholder="admin@example.com" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       OnClick="SaveAcmeEmail" Disabled="@string.IsNullOrWhiteSpace(_acmeEmail)">
+                                Save
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <div class="d-flex align-center justify-space-between">
+                            <MudText Typo="Typo.body2">
+                                Certificates will be automatically requested and renewed.
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                ACME: @_acmeEmail
+                            </MudText>
+                        </div>
+                    </MudAlert>
+                }
+            </MudItem>
+
+            <!-- Certificate Status for Hosts -->
+            @if (Hosts.Any())
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Certificate Status</MudText>
+                    @foreach (var host in Hosts)
+                    {
+                        var cert = ConfigService.GetCertificateByDomain(host);
+                        <div class="d-flex align-center mb-1">
+                            @if (cert != null)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="mr-2" />
+                                <MudText Typo="Typo.body2">@host</MudText>
+                                @if (cert.ExpiresAt.HasValue)
+                                {
+                                    var daysUntilExpiry = (cert.ExpiresAt.Value - DateTime.UtcNow).Days;
+                                    <MudText Typo="Typo.caption" Color="@(daysUntilExpiry < 30 ? Color.Warning : Color.Secondary)" Class="ml-2">
+                                        (expires in @daysUntilExpiry days)
+                                    </MudText>
+                                }
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Small" Class="mr-2" />
+                                <MudText Typo="Typo.body2">@host</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">(will be requested on save)</MudText>
+                            }
+                        </div>
+                    }
+                </MudItem>
+            }
+        }
+
+        <!-- Custom Certificate Selector -->
+        @if (SslMode == SslMode.Custom)
+        {
+            <MudItem xs="12">
+                @if (_certificates.Any())
+                {
+                    <MudSelect T="Guid?" Value="@CustomCertificateId" ValueChanged="OnCertificateSelected"
+                               Label="Select Certificate" Variant="Variant.Outlined">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">-- Select a certificate --</MudSelectItem>
+                        @foreach (var cert in _certificates)
+                        {
+                            <MudSelectItem T="Guid?" Value="@cert.Id">
+                                @cert.Name
+                                @if (cert.ExpiresAt.HasValue)
+                                {
+                                    @($" (expires {cert.ExpiresAt.Value:MMM dd, yyyy})")
+                                }
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @if (CustomCertificateId.HasValue)
+                    {
+                        var selectedCert = _certificates.FirstOrDefault(c => c.Id == CustomCertificateId.Value);
+                        if (selectedCert != null)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                                <MudText Typo="Typo.body2">
+                                    Domains: @string.Join(", ", selectedCert.Domains)
+                                </MudText>
+                            </MudAlert>
+                        }
+                    }
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning">
+                        No certificates available. Upload a certificate in the
+                        <MudLink Href="certificates">Certificates</MudLink> section first.
+                    </MudAlert>
+                }
+            </MudItem>
+        }
+    </MudGrid>
+</div>
+
+@code {
+    [Parameter]
+    public SslMode SslMode { get; set; }
+
+    [Parameter]
+    public EventCallback<SslMode> SslModeChanged { get; set; }
+
+    [Parameter]
+    public bool ForceHttps { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ForceHttpsChanged { get; set; }
+
+    [Parameter]
+    public Guid? CustomCertificateId { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid?> CustomCertificateIdChanged { get; set; }
+
+    [Parameter]
+    public IEnumerable<string> Hosts { get; set; } = Enumerable.Empty<string>();
+
+    private List<Certificate> _certificates = new();
+    private bool _isAcmeConfigured;
+    private string _acmeEmail = "";
+
+    protected override void OnInitialized()
+    {
+        _certificates = ConfigService.GetAllCertificates().ToList();
+        var settings = ConfigService.GetSettings();
+        _isAcmeConfigured = !string.IsNullOrWhiteSpace(settings.AcmeEmail);
+        _acmeEmail = settings.AcmeEmail ?? "";
+    }
+
+    private string GetCardClass(SslMode mode)
+    {
+        return SslMode == mode ? "mud-border-primary" : "";
+    }
+
+    private async Task SelectSslMode(SslMode mode)
+    {
+        await SslModeChanged.InvokeAsync(mode);
+
+        // Auto-enable ForceHttps when selecting SSL
+        if (mode != SslMode.None && !ForceHttps)
+        {
+            await ForceHttpsChanged.InvokeAsync(true);
+        }
+    }
+
+    private async Task OnCertificateSelected(Guid? certId)
+    {
+        await CustomCertificateIdChanged.InvokeAsync(certId);
+    }
+
+    private void SaveAcmeEmail()
+    {
+        if (string.IsNullOrWhiteSpace(_acmeEmail))
+            return;
+
+        var settings = ConfigService.GetSettings();
+        settings.AcmeEmail = _acmeEmail;
+        ConfigService.SaveSettings(settings);
+        _isAcmeConfigured = true;
+        Snackbar.Add("ACME email saved", Severity.Success);
+        StateHasChanged();
+    }
+}

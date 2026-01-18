@@ -8,6 +8,8 @@ public class LiteDbRepository : IDisposable
     private readonly LiteDatabase _database;
     private readonly ILiteCollection<ProxyRoute> _routes;
     private readonly ILiteCollection<Certificate> _certificates;
+    private readonly ILiteCollection<Service> _services;
+    private readonly ILiteCollection<FilterConfiguration> _filterConfigurations;
     private readonly ILiteCollection<BsonDocument> _settings;
 
     public LiteDbRepository(string dataPath)
@@ -22,6 +24,14 @@ public class LiteDbRepository : IDisposable
 
         _certificates = _database.GetCollection<Certificate>("certificates");
         _certificates.EnsureIndex(x => x.Domains);
+
+        _services = _database.GetCollection<Service>("services");
+        _services.EnsureIndex(x => x.Name);
+        _services.EnsureIndex(x => x.Enabled);
+        _services.EnsureIndex(x => x.Source);
+
+        _filterConfigurations = _database.GetCollection<FilterConfiguration>("filter_configurations");
+        _filterConfigurations.EnsureIndex(x => x.RouteId);
 
         _settings = _database.GetCollection<BsonDocument>("settings");
     }
@@ -60,6 +70,43 @@ public class LiteDbRepository : IDisposable
     public void UpsertCertificate(Certificate cert) => _certificates.Upsert(cert);
 
     public bool DeleteCertificate(Guid id) => _certificates.Delete(id);
+
+    // Services
+    public IEnumerable<Service> GetAllServices() => _services.FindAll();
+
+    public IEnumerable<Service> GetEnabledServices() => _services.Find(s => s.Enabled);
+
+    public Service? GetService(Guid id) => _services.FindById(id);
+
+    public Service? GetServiceByName(string name) => _services.FindOne(s => s.Name == name);
+
+    public IEnumerable<Service> GetServicesBySource(ServiceSource source) => _services.Find(s => s.Source == source);
+
+    public void UpsertService(Service service)
+    {
+        service.UpdatedAt = DateTime.UtcNow;
+        _services.Upsert(service);
+    }
+
+    public bool DeleteService(Guid id) => _services.Delete(id);
+
+    // Filter Configurations
+    public IEnumerable<FilterConfiguration> GetAllFilterConfigurations() => _filterConfigurations.FindAll();
+
+    public FilterConfiguration? GetFilterConfiguration(Guid id) => _filterConfigurations.FindById(id);
+
+    public FilterConfiguration? GetFilterConfigurationByRoute(Guid routeId) =>
+        _filterConfigurations.FindOne(f => f.RouteId == routeId);
+
+    public void UpsertFilterConfiguration(FilterConfiguration config) => _filterConfigurations.Upsert(config);
+
+    public bool DeleteFilterConfiguration(Guid id) => _filterConfigurations.Delete(id);
+
+    public bool DeleteFilterConfigurationByRoute(Guid routeId)
+    {
+        var config = _filterConfigurations.FindOne(f => f.RouteId == routeId);
+        return config != null && _filterConfigurations.Delete(config.Id);
+    }
 
     // Settings
     public AppSettings GetSettings()

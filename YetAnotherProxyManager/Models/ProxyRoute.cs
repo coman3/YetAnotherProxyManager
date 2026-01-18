@@ -47,6 +47,24 @@ public class HttpRouteConfig
     public Dictionary<string, string> RequestHeaders { get; set; } = new();
     public Dictionary<string, string> ResponseHeaders { get; set; } = new();
     public int? TimeoutSeconds { get; set; }
+
+    // Advanced timeout configuration
+    public AdvancedTimeoutConfig? AdvancedTimeouts { get; set; }
+    public RetryPolicyConfig? RetryPolicy { get; set; }
+}
+
+public class AdvancedTimeoutConfig
+{
+    public int? ConnectTimeoutSeconds { get; set; }
+    public int? RequestTimeoutSeconds { get; set; }
+    public int? ResponseTimeoutSeconds { get; set; }
+}
+
+public class RetryPolicyConfig
+{
+    public bool Enabled { get; set; }
+    public int MaxRetries { get; set; } = 3;
+    public List<int> RetryOnStatusCodes { get; set; } = new() { 502, 503, 504 };
 }
 
 public class UpstreamServer
@@ -54,6 +72,10 @@ public class UpstreamServer
     public string Address { get; set; } = string.Empty;
     public int Weight { get; set; } = 1;
     public bool Enabled { get; set; } = true;
+
+    // Service reference (optional - if set, Address is resolved from service)
+    public Guid? ServiceId { get; set; }
+    public Guid? ServiceEndpointId { get; set; }
 }
 
 public class StreamRouteConfig

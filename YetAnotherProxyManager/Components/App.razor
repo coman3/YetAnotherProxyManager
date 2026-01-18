@@ -5,15 +5,163 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
+    <base href="/.proxy-manager/" />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <HeadOutlet @rendermode="RenderMode.InteractiveServer" />
     <title>YetAnotherProxyManager</title>
+    <style>
+        .leaflet-container {
+            background: #1e1e1e;
+        }
+        .request-line {
+            stroke: #90caf9;
+            stroke-width: 2;
+            stroke-opacity: 0.6;
+            fill: none;
+        }
+        .request-line-animate {
+            stroke-dasharray: 10, 5;
+            animation: dash 1s linear infinite;
+        }
+        @@keyframes dash {
+            to { stroke-dashoffset: -15; }
+        }
+    </style>
 </head>
 <body>
     <Routes @rendermode="RenderMode.InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script>
+        let analyticsMap = null;
+        let serverMarker = null;
+        let serverLat = 0;
+        let serverLon = 0;
+        let requestLines = [];
+        const maxLines = 100;
+
+        window.initAnalyticsMap = function(sLat, sLon, locations) {
+            serverLat = sLat;
+            serverLon = sLon;
+
+            // Destroy existing map if any
+            if (analyticsMap) {
+                analyticsMap.remove();
+            }
+
+            // Create map centered on server or world view
+            const centerLat = sLat || 20;
+            const centerLon = sLon || 0;
+            const zoom = (sLat && sLon) ? 3 : 2;
+
+            analyticsMap = L.map('analytics-map', {
+                center: [centerLat, centerLon],
+                zoom: zoom,
+                zoomControl: true
+            });
+
+            // Add dark tile layer (CartoDB Dark Matter)
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(analyticsMap);
+
+            // Add server marker if we have coordinates
+            if (sLat && sLon) {
+                serverMarker = L.circleMarker([sLat, sLon], {
+                    radius: 10,
+                    fillColor: '#4caf50',
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(analyticsMap);
+                serverMarker.bindPopup('<b>Server Location</b>');
+            }
+
+            // Add existing request locations
+            if (locations && locations.length > 0) {
+                locations.forEach(loc => {
+                    addLocationMarker(loc.lat, loc.lon, loc.city, loc.country, loc.count, false);
+                });
+            }
+        };
+
+        window.addMapRequest = function(lat, lon, city, country) {
+            if (!analyticsMap) return;
+
+            // Add marker for the request origin
+            addLocationMarker(lat, lon, city, country, 1, true);
+
+            // Draw line to server if we have server coordinates
+            if (serverLat && serverLon) {
+                drawRequestLine(lat, lon);
+            }
+        };
+
+        function addLocationMarker(lat, lon, city, country, count, animate) {
+            const radius = Math.min(5 + Math.log(count + 1) * 2, 15);
+
+            const marker = L.circleMarker([lat, lon], {
+                radius: radius,
+                fillColor: animate ? '#ff9800' : '#2196f3',
+                color: '#fff',
+                weight: 1,
+                opacity: 0.8,
+                fillOpacity: animate ? 0.9 : 0.6
+            }).addTo(analyticsMap);
+
+            marker.bindPopup(`<b>${city}, ${country}</b><br>Requests: ${count}`);
+
+            if (animate) {
+                // Pulse animation
+                let pulseCount = 0;
+                const pulseInterval = setInterval(() => {
+                    marker.setStyle({ fillOpacity: pulseCount % 2 === 0 ? 0.9 : 0.5 });
+                    pulseCount++;
+                    if (pulseCount > 5) {
+                        clearInterval(pulseInterval);
+                        marker.setStyle({ fillColor: '#2196f3', fillOpacity: 0.6 });
+                    }
+                }, 200);
+            }
+        }
+
+        function drawRequestLine(fromLat, fromLon) {
+            const line = L.polyline([[fromLat, fromLon], [serverLat, serverLon]], {
+                color: '#90caf9',
+                weight: 2,
+                opacity: 0.6,
+                dashArray: '10, 5'
+            }).addTo(analyticsMap);
+
+            requestLines.push(line);
+
+            // Animate line
+            let offset = 0;
+            const animateInterval = setInterval(() => {
+                offset -= 1;
+                line.setStyle({ dashOffset: offset });
+            }, 50);
+
+            // Remove line after animation
+            setTimeout(() => {
+                clearInterval(animateInterval);
+                analyticsMap.removeLayer(line);
+                const index = requestLines.indexOf(line);
+                if (index > -1) requestLines.splice(index, 1);
+            }, 3000);
+
+            // Clean up old lines if too many
+            while (requestLines.length > maxLines) {
+                const oldLine = requestLines.shift();
+                analyticsMap.removeLayer(oldLine);
+            }
+        }
+    </script>
 </body>
 </html>

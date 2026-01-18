@@ -7,6 +7,7 @@ public class ConfigurationService
 {
     private readonly LiteDbRepository _repository;
     private readonly ILogger<ConfigurationService> _logger;
+    private ServiceManager? _serviceManager;
 
     public event Action? ConfigurationChanged;
 
@@ -15,6 +16,17 @@ public class ConfigurationService
         _repository = repository;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Wires up the ServiceManager to propagate its changes through ConfigurationChanged
+    /// </summary>
+    public void SetServiceManager(ServiceManager serviceManager)
+    {
+        _serviceManager = serviceManager;
+        _serviceManager.ServicesChanged += () => NotifyConfigurationChanged();
+    }
+
+    public ServiceManager? ServiceManager => _serviceManager;
 
     // Routes
     public IEnumerable<ProxyRoute> GetAllRoutes() => _repository.GetAllRoutes();
@@ -73,6 +85,45 @@ public class ConfigurationService
         if (result)
         {
             _logger.LogInformation("Certificate deleted: {Id}", id);
+            NotifyConfigurationChanged();
+        }
+        return result;
+    }
+
+    // Filter Configurations
+    public IEnumerable<FilterConfiguration> GetAllFilterConfigurations() =>
+        _repository.GetAllFilterConfigurations();
+
+    public FilterConfiguration? GetFilterConfiguration(Guid id) =>
+        _repository.GetFilterConfiguration(id);
+
+    public FilterConfiguration? GetFilterConfigurationByRoute(Guid routeId) =>
+        _repository.GetFilterConfigurationByRoute(routeId);
+
+    public void SaveFilterConfiguration(FilterConfiguration config)
+    {
+        _repository.UpsertFilterConfiguration(config);
+        _logger.LogInformation("Filter configuration saved for route: {RouteId}", config.RouteId);
+        NotifyConfigurationChanged();
+    }
+
+    public bool DeleteFilterConfiguration(Guid id)
+    {
+        var result = _repository.DeleteFilterConfiguration(id);
+        if (result)
+        {
+            _logger.LogInformation("Filter configuration deleted: {Id}", id);
+            NotifyConfigurationChanged();
+        }
+        return result;
+    }
+
+    public bool DeleteFilterConfigurationByRoute(Guid routeId)
+    {
+        var result = _repository.DeleteFilterConfigurationByRoute(routeId);
+        if (result)
+        {
+            _logger.LogInformation("Filter configuration deleted for route: {RouteId}", routeId);
             NotifyConfigurationChanged();
         }
         return result;

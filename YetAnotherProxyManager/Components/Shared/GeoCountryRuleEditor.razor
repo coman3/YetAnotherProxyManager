@@ -1,0 +1,25 @@
+<MudTextField @bind-Value="_countryCodes" Label="Country Codes (comma-separated)"
+              Variant="Variant.Outlined" Placeholder="e.g., US, CA, GB, AU"
+              HelperText="Use ISO 3166-1 alpha-2 codes" Immediate="true"
+              TextChanged="OnCountryCodesChanged" />
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    private string _countryCodes = "";
+
+    protected override void OnInitialized()
+    {
+        Rule.GeoCountryConfig ??= new GeoCountryConfig();
+        _countryCodes = string.Join(", ", Rule.GeoCountryConfig.CountryCodes);
+    }
+
+    private void OnCountryCodesChanged(string value)
+    {
+        Rule.GeoCountryConfig!.CountryCodes = _countryCodes
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(c => c.ToUpperInvariant())
+            .ToList();
+    }
+}

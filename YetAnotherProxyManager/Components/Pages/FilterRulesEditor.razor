@@ -1,0 +1,407 @@
+@page "/routes/{RouteId:guid}/filters"
+@inject ConfigurationService ConfigService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Filter Rules - YetAnotherProxyManager</PageTitle>
+
+@if (_route == null)
+{
+    <MudAlert Severity="Severity.Error">Route not found</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-2">Filter Rules</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        Configure access rules for route: <strong>@_route.Name</strong>
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_config.Enabled" Label="Enable Filtering" Color="Color.Primary" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_config.DefaultAction" Label="Default Action" Variant="Variant.Outlined">
+                    <MudSelectItem Value="FilterAction.Allow">Allow (block matched rules)</MudSelectItem>
+                    <MudSelectItem Value="FilterAction.Deny">Deny (allow matched rules)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Class="mb-3">Rule Groups</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Rule groups are evaluated in priority order (highest first). The first matching group determines the action.
+    </MudText>
+
+    @foreach (var group in _config.RuleGroups.OrderByDescending(g => g.Priority))
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="group.Name" Label="Group Name" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudNumericField @bind-Value="group.Priority" Label="Priority" Min="0" Max="100" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudSelect @bind-Value="group.Operator" Label="Logic" Variant="Variant.Outlined">
+                        <MudSelectItem Value="LogicOperator.And">AND (all must match)</MudSelectItem>
+                        <MudSelectItem Value="LogicOperator.Or">OR (any can match)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" md="2">
+                    <MudSelect @bind-Value="group.Action" Label="Action" Variant="Variant.Outlined">
+                        <MudSelectItem Value="FilterAction.Allow">Allow</MudSelectItem>
+                        <MudSelectItem Value="FilterAction.Deny">Deny</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" md="2" Class="d-flex align-center justify-end gap-2">
+                    <MudSwitch @bind-Value="group.Enabled" Color="Color.Success" Size="Size.Small" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => RemoveGroup(group))" />
+                </MudItem>
+            </MudGrid>
+
+            <!-- Rules within group -->
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Rules</MudText>
+
+            @foreach (var rule in group.Rules)
+            {
+                <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudGrid>
+                        <MudItem xs="12" md="3">
+                            <MudSelect T="FilterRuleType" Value="rule.Type" ValueChanged="@(v => OnRuleTypeChanged(rule, v))"
+                                       Label="Rule Type" Variant="Variant.Outlined" Size="Size.Small">
+                                <MudSelectItem Value="FilterRuleType.IpPredefined">Predefined IP Rule</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.IpSingle">Single IP</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.IpRange">IP Range</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.IpCidr">CIDR Notation</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.GeoCountry">Country</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.GeoContinent">Continent</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.TimeBased">Time-Based</MudSelectItem>
+                                <MudSelectItem Value="FilterRuleType.Header">Header</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+
+                        <!-- Type-specific configuration -->
+                        <MudItem xs="12" md="7">
+                            @switch (rule.Type)
+                            {
+                                case FilterRuleType.IpPredefined:
+                                    <IpPredefinedRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.IpSingle:
+                                    <IpSingleRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.IpRange:
+                                    <IpRangeRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.IpCidr:
+                                    <IpCidrRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.GeoCountry:
+                                    <GeoCountryRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.GeoContinent:
+                                    <GeoContinentRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.TimeBased:
+                                    <TimeBasedRuleEditor Rule="rule" />
+                                    break;
+                                case FilterRuleType.Header:
+                                    <HeaderRuleEditor Rule="rule" />
+                                    break;
+                            }
+                        </MudItem>
+
+                        <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
+                            <MudCheckBox @bind-Value="rule.Negate" Label="Negate" Size="Size.Small" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RemoveRule(group, rule))" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => AddRule(group))" Size="Size.Small">
+                Add Rule
+            </MudButton>
+        </MudPaper>
+    }
+
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="AddGroup" Class="mb-4">
+        Add Rule Group
+    </MudButton>
+
+    <!-- Quick Templates -->
+    <MudExpansionPanels Class="mb-4">
+        <MudExpansionPanel Text="Quick Templates" Icon="@Icons.Material.Filled.AutoAwesome">
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true"
+                               OnClick="ApplyLocalOnlyTemplate">
+                        Local Network Only
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true"
+                               OnClick="ApplyBusinessHoursTemplate">
+                        Business Hours Only
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true"
+                               OnClick="ApplyCountryWhitelistTemplate">
+                        Country Whitelist
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    <!-- Action Buttons -->
+    <div class="d-flex gap-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                   Disabled="@_isSaving">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                @:Saving...
+            }
+            else
+            {
+                @:Save Filter Rules
+            }
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="Cancel" Disabled="@_isSaving">Cancel</MudButton>
+        @if (_hasExistingConfig)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="Delete" Disabled="@_isSaving">
+                Delete All Rules
+            </MudButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid RouteId { get; set; }
+
+    private ProxyRoute? _route;
+    private FilterConfiguration _config = new();
+    private bool _hasExistingConfig;
+    private bool _isSaving;
+
+    protected override void OnInitialized()
+    {
+        _route = ConfigService.GetRoute(RouteId);
+        if (_route == null) return;
+
+        var existingConfig = ConfigService.GetFilterConfigurationByRoute(RouteId);
+        if (existingConfig != null)
+        {
+            _config = existingConfig;
+            _hasExistingConfig = true;
+        }
+        else
+        {
+            _config = new FilterConfiguration
+            {
+                RouteId = RouteId,
+                Enabled = false,
+                DefaultAction = FilterAction.Allow
+            };
+        }
+    }
+
+    private void AddGroup()
+    {
+        var maxPriority = _config.RuleGroups.Count > 0 ? _config.RuleGroups.Max(g => g.Priority) : 0;
+        _config.RuleGroups.Add(new FilterRuleGroup
+        {
+            Name = $"Rule Group {_config.RuleGroups.Count + 1}",
+            Priority = maxPriority + 10,
+            Action = FilterAction.Allow
+        });
+    }
+
+    private void RemoveGroup(FilterRuleGroup group)
+    {
+        _config.RuleGroups.Remove(group);
+    }
+
+    private void AddRule(FilterRuleGroup group)
+    {
+        group.Rules.Add(new FilterRule
+        {
+            Type = FilterRuleType.IpPredefined,
+            IpPredefinedConfig = new IpPredefinedConfig { Rule = PredefinedIpRule.LocalOnly }
+        });
+    }
+
+    private void RemoveRule(FilterRuleGroup group, FilterRule rule)
+    {
+        group.Rules.Remove(rule);
+    }
+
+    private void OnRuleTypeChanged(FilterRule rule, FilterRuleType newType)
+    {
+        rule.Type = newType;
+
+        // Initialize type-specific config
+        rule.IpSingleConfig = null;
+        rule.IpRangeConfig = null;
+        rule.IpCidrConfig = null;
+        rule.IpPredefinedConfig = null;
+        rule.GeoCountryConfig = null;
+        rule.GeoContinentConfig = null;
+        rule.TimeBasedConfig = null;
+        rule.HeaderConfig = null;
+
+        switch (newType)
+        {
+            case FilterRuleType.IpSingle:
+                rule.IpSingleConfig = new IpSingleConfig();
+                break;
+            case FilterRuleType.IpRange:
+                rule.IpRangeConfig = new IpRangeConfig();
+                break;
+            case FilterRuleType.IpCidr:
+                rule.IpCidrConfig = new IpCidrConfig();
+                break;
+            case FilterRuleType.IpPredefined:
+                rule.IpPredefinedConfig = new IpPredefinedConfig { Rule = PredefinedIpRule.LocalOnly };
+                break;
+            case FilterRuleType.GeoCountry:
+                rule.GeoCountryConfig = new GeoCountryConfig();
+                break;
+            case FilterRuleType.GeoContinent:
+                rule.GeoContinentConfig = new GeoContinentConfig();
+                break;
+            case FilterRuleType.TimeBased:
+                rule.TimeBasedConfig = new TimeBasedConfig();
+                break;
+            case FilterRuleType.Header:
+                rule.HeaderConfig = new HeaderConfig();
+                break;
+        }
+    }
+
+    private void ApplyLocalOnlyTemplate()
+    {
+        _config.Enabled = true;
+        _config.DefaultAction = FilterAction.Deny;
+        _config.RuleGroups.Clear();
+        _config.RuleGroups.Add(new FilterRuleGroup
+        {
+            Name = "Allow Local Network",
+            Priority = 100,
+            Action = FilterAction.Allow,
+            Enabled = true,
+            Rules = new List<FilterRule>
+            {
+                new FilterRule
+                {
+                    Type = FilterRuleType.IpPredefined,
+                    IpPredefinedConfig = new IpPredefinedConfig { Rule = PredefinedIpRule.LocalOnly }
+                }
+            }
+        });
+        Snackbar.Add("Applied 'Local Network Only' template", Severity.Info);
+    }
+
+    private void ApplyBusinessHoursTemplate()
+    {
+        _config.Enabled = true;
+        _config.DefaultAction = FilterAction.Deny;
+        _config.RuleGroups.Clear();
+        _config.RuleGroups.Add(new FilterRuleGroup
+        {
+            Name = "Business Hours Access",
+            Priority = 100,
+            Action = FilterAction.Allow,
+            Enabled = true,
+            Rules = new List<FilterRule>
+            {
+                new FilterRule
+                {
+                    Type = FilterRuleType.TimeBased,
+                    TimeBasedConfig = new TimeBasedConfig
+                    {
+                        DaysOfWeek = new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday },
+                        StartTime = new TimeOnly(9, 0),
+                        EndTime = new TimeOnly(17, 0)
+                    }
+                }
+            }
+        });
+        Snackbar.Add("Applied 'Business Hours Only' template", Severity.Info);
+    }
+
+    private void ApplyCountryWhitelistTemplate()
+    {
+        _config.Enabled = true;
+        _config.DefaultAction = FilterAction.Deny;
+        _config.RuleGroups.Clear();
+        _config.RuleGroups.Add(new FilterRuleGroup
+        {
+            Name = "Allowed Countries",
+            Priority = 100,
+            Action = FilterAction.Allow,
+            Enabled = true,
+            Rules = new List<FilterRule>
+            {
+                new FilterRule
+                {
+                    Type = FilterRuleType.GeoCountry,
+                    GeoCountryConfig = new GeoCountryConfig
+                    {
+                        CountryCodes = new List<string> { "US", "CA", "GB", "AU" }
+                    }
+                }
+            }
+        });
+        Snackbar.Add("Applied 'Country Whitelist' template - edit countries as needed", Severity.Info);
+    }
+
+    private void Save()
+    {
+        _isSaving = true;
+
+        try
+        {
+            ConfigService.SaveFilterConfiguration(_config);
+            _hasExistingConfig = true;
+            Snackbar.Add("Filter rules saved", Severity.Success);
+            Navigation.NavigateTo($"routes/http/{RouteId}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo($"routes/http/{RouteId}");
+    }
+
+    private void Delete()
+    {
+        if (_hasExistingConfig)
+        {
+            ConfigService.DeleteFilterConfigurationByRoute(RouteId);
+            Snackbar.Add("Filter rules deleted", Severity.Success);
+            Navigation.NavigateTo($"routes/http/{RouteId}");
+        }
+    }
+}

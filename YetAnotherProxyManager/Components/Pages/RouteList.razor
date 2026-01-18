@@ -13,9 +13,9 @@
                       AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true" />
         <MudSpacer />
         <MudMenu Label="Add Route" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
-            <MudMenuItem Href="/routes/http/new" Icon="@Icons.Material.Filled.Http">HTTP Route</MudMenuItem>
-            <MudMenuItem Href="/routes/tcp/new" Icon="@Icons.Material.Filled.Cable">TCP Forward</MudMenuItem>
-            <MudMenuItem Href="/routes/udp/new" Icon="@Icons.Material.Filled.SettingsEthernet">UDP Forward</MudMenuItem>
+            <MudMenuItem Href="routes/http/new" Icon="@Icons.Material.Filled.Http">HTTP Route</MudMenuItem>
+            <MudMenuItem Href="routes/tcp/new" Icon="@Icons.Material.Filled.Cable">TCP Forward</MudMenuItem>
+            <MudMenuItem Href="routes/udp/new" Icon="@Icons.Material.Filled.SettingsEthernet">UDP Forward</MudMenuItem>
         </MudMenu>
     </MudToolBar>
 
@@ -104,10 +104,10 @@
     {
         var path = route.Type switch
         {
-            RouteType.Http => $"/routes/http/{route.Id}",
-            RouteType.Tcp => $"/routes/tcp/{route.Id}",
-            RouteType.Udp => $"/routes/udp/{route.Id}",
-            _ => "/routes"
+            RouteType.Http => $"routes/http/{route.Id}",
+            RouteType.Tcp => $"routes/tcp/{route.Id}",
+            RouteType.Udp => $"routes/udp/{route.Id}",
+            _ => "routes"
         };
         Navigation.NavigateTo(path);
     }

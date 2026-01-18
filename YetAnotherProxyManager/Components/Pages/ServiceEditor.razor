@@ -1,0 +1,219 @@
+@page "/services/new"
+@page "/services/{Id:guid}"
+@inject ServiceManager ServiceManager
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_isNew ? "New Service" : "Edit Service") - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">@(_isNew ? "New Service" : "Edit Service")</MudText>
+
+<MudPaper Class="pa-4">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_service.Name" Label="Service Name" Required="true"
+                              RequiredError="Name is required" Variant="Variant.Outlined"
+                              HelperText="A unique identifier, e.g., 'home-server' or 'media-stack'" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_service.Enabled" Label="Enabled" Color="Color.Success" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_service.Description" Label="Description (optional)" Variant="Variant.Outlined"
+                              HelperText="Brief description of this service" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_service.BaseAddress" Label="Base Address" Required="true"
+                              RequiredError="Base address is required" Variant="Variant.Outlined"
+                              HelperText="IP address or hostname, e.g., '10.0.0.3' or 'server.local'" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_service.Source" Label="Source" Variant="Variant.Outlined" Disabled="true">
+                    <MudSelectItem Value="ServiceSource.Manual">Manual</MudSelectItem>
+                    <MudSelectItem Value="ServiceSource.Docker">Docker</MudSelectItem>
+                    <MudSelectItem Value="ServiceSource.Portainer">Portainer</MudSelectItem>
+                    <MudSelectItem Value="ServiceSource.TrueNAS">TrueNAS</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 mt-4">Endpoints</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Define the services available on this server. Each endpoint represents a different application or port.
+                </MudText>
+            </MudItem>
+
+            @for (int i = 0; i < _service.Endpoints.Count; i++)
+            {
+                var index = i;
+                <MudItem xs="12">
+                    <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background-color: var(--mud-palette-background-grey);">
+                        <MudGrid>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_service.Endpoints[index].Name" Label="Endpoint Name"
+                                              Variant="Variant.Outlined" Required="true"
+                                              HelperText="e.g., 'plex', 'jellyfin'" />
+                            </MudItem>
+                            <MudItem xs="6" md="2">
+                                <MudNumericField @bind-Value="_service.Endpoints[index].Port" Label="Port"
+                                                 Min="1" Max="65535" Variant="Variant.Outlined" Required="true" />
+                            </MudItem>
+                            <MudItem xs="6" md="2">
+                                <MudSelect @bind-Value="_service.Endpoints[index].Protocol" Label="Protocol" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="@("http")">HTTP</MudSelectItem>
+                                    <MudSelectItem Value="@("https")">HTTPS</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_service.Endpoints[index].PathPrefix" Label="Path Prefix"
+                                              Variant="Variant.Outlined" HelperText="Optional, e.g., '/web'" />
+                            </MudItem>
+                            <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
+                                <MudSwitch @bind-Value="_service.Endpoints[index].Enabled" Color="Color.Success"
+                                           Size="Size.Small" />
+                                @if (_service.Endpoints.Count > 1)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                   Size="Size.Small" OnClick="@(() => RemoveEndpoint(index))" />
+                                }
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Preview: @GetEndpointPreview(_service.Endpoints[index])
+                                </MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddEndpoint">
+                    Add Endpoint
+                </MudButton>
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex gap-2 mt-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                           Disabled="@(!_isValid || _isSaving)">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        @:Saving...
+                    }
+                    else
+                    {
+                        @(_isNew ? "Create Service" : "Save Changes")
+                    }
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="Cancel" Disabled="@_isSaving">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public Guid? Id { get; set; }
+
+    private Service _service = new();
+    private bool _isNew = true;
+    private bool _isValid;
+    private MudForm? _form;
+    private bool _isSaving;
+
+    protected override void OnInitialized()
+    {
+        if (Id.HasValue)
+        {
+            var existing = ServiceManager.GetService(Id.Value);
+            if (existing != null)
+            {
+                _service = existing;
+                _isNew = false;
+            }
+        }
+
+        if (_service.Endpoints.Count == 0)
+        {
+            _service.Endpoints.Add(new ServiceEndpoint { Port = 80 });
+        }
+    }
+
+    private void AddEndpoint()
+    {
+        _service.Endpoints.Add(new ServiceEndpoint { Port = 80 });
+    }
+
+    private void RemoveEndpoint(int index)
+    {
+        if (_service.Endpoints.Count > 1)
+        {
+            _service.Endpoints.RemoveAt(index);
+        }
+    }
+
+    private string GetEndpointPreview(ServiceEndpoint endpoint)
+    {
+        var protocol = endpoint.Protocol.ToLowerInvariant();
+        var address = string.IsNullOrEmpty(_service.BaseAddress) ? "[base-address]" : _service.BaseAddress;
+        var path = string.IsNullOrEmpty(endpoint.PathPrefix) ? "" : $"/{endpoint.PathPrefix.TrimStart('/')}";
+        return $"{protocol}://{address}:{endpoint.Port}{path}";
+    }
+
+    private void Save()
+    {
+        _isSaving = true;
+
+        // Validate unique endpoint names within service
+        var duplicateNames = _service.Endpoints
+            .GroupBy(e => e.Name.ToLowerInvariant())
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateNames.Any())
+        {
+            Snackbar.Add($"Duplicate endpoint names: {string.Join(", ", duplicateNames)}", Severity.Error);
+            _isSaving = false;
+            return;
+        }
+
+        // Validate unique ports within service
+        var duplicatePorts = _service.Endpoints
+            .GroupBy(e => e.Port)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicatePorts.Any())
+        {
+            Snackbar.Add($"Duplicate ports: {string.Join(", ", duplicatePorts)}", Severity.Error);
+            _isSaving = false;
+            return;
+        }
+
+        // Check for duplicate service name
+        var existingService = ServiceManager.GetServiceByName(_service.Name);
+        if (existingService != null && existingService.Id != _service.Id)
+        {
+            Snackbar.Add($"A service named '{_service.Name}' already exists", Severity.Error);
+            _isSaving = false;
+            return;
+        }
+
+        ServiceManager.SaveService(_service);
+        Snackbar.Add($"Service saved: {_service.Name}", Severity.Success);
+        Navigation.NavigateTo("services");
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("services");
+    }
+}

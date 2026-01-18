@@ -1,0 +1,557 @@
+@page "/analytics"
+@inject AnalyticsService AnalyticsService
+@inject GeoLocationService GeoService
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Analytics - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Real-Time Analytics</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Analytics" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_summary.TotalRequests.ToString("N0")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Total Requests</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_summary.RequestsLastMinute.ToString("N0")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Last Minute</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Large" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_summary.AverageResponseTimeMs.ToString("F0")ms</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Avg Response</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Public" Size="Size.Large" Color="Color.Success" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_summary.RequestsByCountry.Count</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Countries</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-4">
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudText Typo="Typo.h6">Live Request Rate</MudText>
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex justify-end">
+            <MudToggleGroup T="string" Value="_chartType" ValueChanged="OnChartTypeChanged" Size="Size.Small">
+                <MudToggleItem Value="@("line")">Line</MudToggleItem>
+                <MudToggleItem Value="@("bar")">Bar</MudToggleItem>
+                <MudToggleItem Value="@("area")">Area</MudToggleItem>
+            </MudToggleGroup>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="TimeSeriesGrouping" Value="_groupBy" ValueChanged="OnGroupByChanged" Label="Group By"
+                       Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem Value="TimeSeriesGrouping.None">None (Total)</MudSelectItem>
+                <MudSelectItem Value="TimeSeriesGrouping.Country">Country</MudSelectItem>
+                <MudSelectItem Value="TimeSeriesGrouping.Host">Hostname</MudSelectItem>
+                <MudSelectItem Value="TimeSeriesGrouping.Path">Path</MudSelectItem>
+                <MudSelectItem Value="TimeSeriesGrouping.StatusCode">Status Code</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Value="_filterCountry" ValueChanged="OnCountryFilterChanged" Label="Filter Country"
+                       Variant="Variant.Outlined" Dense="true" Clearable="true">
+                @foreach (var country in _countries)
+                {
+                    <MudSelectItem Value="@country">@country</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Value="_filterHost" ValueChanged="OnHostFilterChanged" Label="Filter Host"
+                       Variant="Variant.Outlined" Dense="true" Clearable="true">
+                @foreach (var host in _hosts)
+                {
+                    <MudSelectItem Value="@host">@host</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Value="_filterPath" ValueChanged="OnPathFilterChanged" Label="Filter Path"
+                       Variant="Variant.Outlined" Dense="true" Clearable="true">
+                @foreach (var path in _paths)
+                {
+                    <MudSelectItem Value="@path">@path</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+
+    <div style="height: 400px; width: 100%; position: relative; overflow: hidden;" class="mt-4">
+        <ApexCharts.ApexChart TItem="ChartDataPoint"
+                   Options="_chartOptions"
+                   Height="400"
+                   @ref="_chart">
+            @if (_chartType == "bar")
+            {
+                <ApexCharts.ApexPointSeries TItem="ChartDataPoint"
+                                 Items="@_chartPoints"
+                                 Name="Requests"
+                                 SeriesType="ApexCharts.SeriesType.Bar"
+                                 XValue="@(p => p.Time)"
+                                 YValue="@(p => (decimal)p.Value)"
+                                 OrderBy="@(p => p.X)" />
+            }
+            else if (_chartType == "area")
+            {
+                <ApexCharts.ApexPointSeries TItem="ChartDataPoint"
+                                 Items="@_chartPoints"
+                                 Name="Requests"
+                                 SeriesType="ApexCharts.SeriesType.Area"
+                                 XValue="@(p => p.Time)"
+                                 YValue="@(p => (decimal)p.Value)"
+                                 OrderBy="@(p => p.X)" />
+            }
+            else
+            {
+                <ApexCharts.ApexPointSeries TItem="ChartDataPoint"
+                                 Items="@_chartPoints"
+                                 Name="Requests"
+                                 SeriesType="ApexCharts.SeriesType.Line"
+                                 XValue="@(p => p.Time)"
+                                 YValue="@(p => (decimal)p.Value)"
+                                 OrderBy="@(p => p.X)" />
+            }
+        </ApexCharts.ApexChart>
+    </div>
+</MudPaper>
+
+<MudPaper Class="pa-4 mt-4">
+    <MudText Typo="Typo.h6" Class="mb-2">
+        Request Map
+        @if (_serverLocation != null)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">
+                Server: @_serverLocation.WanIp (@_serverLocation.City, @_serverLocation.Country)
+            </MudChip>
+        }
+    </MudText>
+    <div id="analytics-map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
+</MudPaper>
+
+<MudGrid Class="mt-4">
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Top Countries</MudText>
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th style="text-align: right;">Requests</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var country in _summary.RequestsByCountry.Take(5))
+                    {
+                        <tr>
+                            <td>@country.Key</td>
+                            <td style="text-align: right;">@country.Value.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Status Codes</MudText>
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th style="text-align: right;">Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var status in _summary.RequestsByStatusCode)
+                    {
+                        <tr>
+                            <td>
+                                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(status.Key)">@status.Key</MudChip>
+                            </td>
+                            <td style="text-align: right;">@status.Value.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-4">
+    <MudText Typo="Typo.h6" Class="mb-2">Recent Requests</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Method</th>
+                <th>Host</th>
+                <th>Path</th>
+                <th>IP</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var req in _summary.RecentRequests)
+            {
+                <tr>
+                    <td>@req.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                    <td><MudChip T="string" Size="Size.Small">@req.Method</MudChip></td>
+                    <td>@req.Host</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">@req.Path</td>
+                    <td>@req.ClientIp</td>
+                    <td>@(req.Location != null ? $"{req.Location.City}, {req.Location.Country}" : "-")</td>
+                    <td><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(req.StatusCode)">@req.StatusCode</MudChip></td>
+                    <td>@(req.ResponseTimeMs)ms</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    private AnalyticsSummary _summary = new();
+    private ServerLocation? _serverLocation;
+    private List<RequestAnalytics> _mapRequests = new();
+    private bool _mapInitialized;
+
+    // Chart state - following ApexCharts realtime example pattern
+    private ApexCharts.ApexChart<ChartDataPoint>? _chart;
+    private ApexCharts.ApexChartOptions<ChartDataPoint> _chartOptions = new();
+    private List<ChartDataPoint> _chartPoints = new();
+    private string _chartType = "line";
+    private TimeSeriesGrouping _groupBy = TimeSeriesGrouping.None;
+    private string? _filterCountry;
+    private string? _filterHost;
+    private string? _filterPath;
+
+    // Timer state - using System.Timers.Timer like the example
+    private System.Timers.Timer? _timer;
+    private bool _timerInitialized;
+    private DateTime _maxTime = DateTime.MinValue;
+
+    // Filter options
+    private List<string> _countries = new();
+    private List<string> _hosts = new();
+    private List<string> _paths = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _summary = AnalyticsService.GetSummary();
+        _mapRequests = AnalyticsService.GetRequestsWithLocation(500).ToList();
+        _serverLocation = await GeoService.GetServerLocationAsync();
+
+        RefreshFilterOptions();
+        InitializeChartOptions();
+
+        // Subscribe to real-time updates
+        AnalyticsService.OnRequestReceived += OnRequestReceived;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeMapAsync();
+            _mapInitialized = true;
+
+            // Initialize timer after first render - like the example
+            if (!_timerInitialized)
+            {
+                _timerInitialized = true;
+
+                // Load initial data and render chart
+                InitializeChartData();
+                StateHasChanged();
+
+                // Small delay to ensure chart is ready
+                await Task.Delay(100);
+
+                if (_chart != null)
+                {
+                    await _chart.UpdateSeriesAsync(true);
+                }
+
+                _timer = new System.Timers.Timer(1000);
+                _timer.Elapsed += async (sender, e) => await UpdateChart();
+                _timer.Enabled = true;
+            }
+        }
+    }
+
+    private void InitializeChartOptions()
+    {
+        _chartOptions = new ApexCharts.ApexChartOptions<ChartDataPoint>
+        {
+            Chart = new ApexCharts.Chart
+            {
+                Background = "transparent",
+                Toolbar = new ApexCharts.Toolbar { Show = false },
+                Animations = new ApexCharts.Animations
+                {
+                    Easing = ApexCharts.Easing.Linear,
+                    DynamicAnimation = new ApexCharts.DynamicAnimation
+                    {
+                        Speed = 100
+                    }
+                },
+                Zoom = new ApexCharts.Zoom { Enabled = false }
+            },
+            Theme = new ApexCharts.Theme { Mode = ApexCharts.Mode.Dark },
+            Xaxis = new ApexCharts.XAxis
+            {
+                Type = ApexCharts.XAxisType.Datetime,
+                Range = 60000, // 60 seconds in milliseconds
+                Labels = new ApexCharts.XAxisLabels
+                {
+                    DatetimeFormatter = new ApexCharts.DatetimeFormatter
+                    {
+                        Second = "HH:mm:ss"
+                    }
+                }
+            },
+            Yaxis = new List<ApexCharts.YAxis>
+            {
+                new ApexCharts.YAxis
+                {
+                    Min = 0,
+                    Max = 100,
+                    Labels = new ApexCharts.YAxisLabels
+                    {
+                        Formatter = "function(val) { return Math.floor(val); }"
+                    }
+                }
+            },
+            Stroke = new ApexCharts.Stroke
+            {
+                Curve = ApexCharts.Curve.Smooth,
+                Width = 2
+            },
+            Legend = new ApexCharts.Legend
+            {
+                Position = ApexCharts.LegendPosition.Top,
+                HorizontalAlign = ApexCharts.Align.Right
+            },
+            Tooltip = new ApexCharts.Tooltip
+            {
+                X = new ApexCharts.TooltipX
+                {
+                    Format = "HH:mm:ss"
+                }
+            }
+        };
+    }
+
+    private void InitializeChartData()
+    {
+        // Load initial 60 seconds of historical data
+        var timeSeriesData = AnalyticsService.GetTimeSeries(
+            seconds: 60,
+            groupBy: _groupBy,
+            filterCountry: _filterCountry,
+            filterHost: _filterHost,
+            filterPath: _filterPath);
+
+        if (timeSeriesData?.Series.Any() == true)
+        {
+            var series = timeSeriesData.Series.First();
+            _chartPoints = series.DataPoints.Select(dp => new ChartDataPoint
+            {
+                Time = dp.Timestamp,
+                Value = dp.Value
+            }).ToList();
+
+            if (_chartPoints.Any())
+            {
+                _maxTime = _chartPoints.Max(p => p.Time);
+            }
+        }
+    }
+
+    private async Task UpdateChart()
+    {
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                // Update summary data
+                _summary = AnalyticsService.GetSummary();
+                RefreshFilterOptions();
+
+                // Get latest data point
+                if (_maxTime == DateTime.MinValue)
+                {
+                    _maxTime = _chartPoints.Any() ? _chartPoints.Max(p => p.Time) : DateTime.UtcNow;
+                }
+
+                _maxTime = _maxTime.AddSeconds(1);
+
+                // Get count for this second from the service
+                var latestData = AnalyticsService.GetTimeSeries(
+                    seconds: 2,
+                    groupBy: _groupBy,
+                    filterCountry: _filterCountry,
+                    filterHost: _filterHost,
+                    filterPath: _filterPath);
+
+                var newPoint = new ChartDataPoint
+                {
+                    Time = _maxTime,
+                    Value = latestData?.Series.FirstOrDefault()?.DataPoints.LastOrDefault()?.Value ?? 0
+                };
+
+                _chartPoints.Add(newPoint);
+                StateHasChanged();
+
+                // Append new data point - like the example
+                if (_chart != null)
+                {
+                    await _chart.AppendDataAsync(new List<ChartDataPoint> { newPoint });
+                }
+            }
+            catch
+            {
+                // Ignore errors during disposal
+            }
+        });
+    }
+
+    private void RefreshFilterOptions()
+    {
+        _countries = AnalyticsService.GetDistinctCountries();
+        _hosts = AnalyticsService.GetDistinctHosts();
+        _paths = AnalyticsService.GetDistinctPaths();
+    }
+
+    private async Task ResetChart()
+    {
+        _chartPoints.Clear();
+        _maxTime = DateTime.MinValue;
+        InitializeChartData();
+        if (_chart != null)
+        {
+            await _chart.UpdateSeriesAsync(true);
+        }
+    }
+
+    private async void OnChartTypeChanged(string value)
+    {
+        _chartType = value;
+        StateHasChanged();
+        if (_chart != null)
+        {
+            await _chart.UpdateSeriesAsync(true);
+        }
+    }
+
+    private async void OnGroupByChanged(TimeSeriesGrouping value)
+    {
+        _groupBy = value;
+        await ResetChart();
+        StateHasChanged();
+    }
+
+    private async void OnCountryFilterChanged(string? value)
+    {
+        _filterCountry = value;
+        await ResetChart();
+        StateHasChanged();
+    }
+
+    private async void OnHostFilterChanged(string? value)
+    {
+        _filterHost = value;
+        await ResetChart();
+        StateHasChanged();
+    }
+
+    private async void OnPathFilterChanged(string? value)
+    {
+        _filterPath = value;
+        await ResetChart();
+        StateHasChanged();
+    }
+
+    private async Task InitializeMapAsync()
+    {
+        var serverLat = _serverLocation?.Latitude ?? 0;
+        var serverLon = _serverLocation?.Longitude ?? 0;
+
+        var locations = _mapRequests
+            .Where(r => r.Location != null)
+            .GroupBy(r => new { r.Location!.Latitude, r.Location.Longitude })
+            .Select(g => new
+            {
+                lat = g.Key.Latitude,
+                lon = g.Key.Longitude,
+                count = g.Count(),
+                city = g.First().Location?.City ?? "Unknown",
+                country = g.First().Location?.Country ?? "Unknown"
+            })
+            .ToList();
+
+        await JS.InvokeVoidAsync("initAnalyticsMap", serverLat, serverLon, locations);
+    }
+
+    private async void OnRequestReceived(RequestAnalytics request)
+    {
+        if (request.Location != null && _mapInitialized)
+        {
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("addMapRequest",
+                        request.Location.Latitude,
+                        request.Location.Longitude,
+                        request.Location.City ?? "Unknown",
+                        request.Location.Country ?? "Unknown");
+                }
+                catch
+                {
+                    // Ignore JS interop errors during disposal
+                }
+            });
+        }
+    }
+
+    private MudBlazor.Color GetStatusColor(int statusCode) => statusCode switch
+    {
+        >= 200 and < 300 => MudBlazor.Color.Success,
+        >= 300 and < 400 => MudBlazor.Color.Info,
+        >= 400 and < 500 => MudBlazor.Color.Warning,
+        >= 500 => MudBlazor.Color.Error,
+        _ => MudBlazor.Color.Default
+    };
+
+    public void Dispose()
+    {
+        AnalyticsService.OnRequestReceived -= OnRequestReceived;
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+
+    public class ChartDataPoint
+    {
+        public DateTime Time { get; set; }
+        public int Value { get; set; }
+    }
+}

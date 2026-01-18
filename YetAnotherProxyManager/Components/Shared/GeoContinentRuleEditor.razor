@@ -1,0 +1,38 @@
+<MudSelect T="string" Label="Continents" MultiSelection="true" SelectAll="true"
+           SelectedValues="_selectedContinents" SelectedValuesChanged="OnSelectionChanged"
+           Variant="Variant.Outlined">
+    @foreach (var continent in Continents)
+    {
+        <MudSelectItem T="string" Value="@continent.Key">@continent.Value (@continent.Key)</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    private IEnumerable<string> _selectedContinents = new List<string>();
+
+    private static readonly Dictionary<string, string> Continents = new()
+    {
+        ["AF"] = "Africa",
+        ["AN"] = "Antarctica",
+        ["AS"] = "Asia",
+        ["EU"] = "Europe",
+        ["NA"] = "North America",
+        ["OC"] = "Oceania",
+        ["SA"] = "South America"
+    };
+
+    protected override void OnInitialized()
+    {
+        Rule.GeoContinentConfig ??= new GeoContinentConfig();
+        _selectedContinents = Rule.GeoContinentConfig.ContinentCodes;
+    }
+
+    private void OnSelectionChanged(IEnumerable<string> values)
+    {
+        _selectedContinents = values;
+        Rule.GeoContinentConfig!.ContinentCodes = values.ToList();
+    }
+}

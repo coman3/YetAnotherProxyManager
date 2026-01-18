@@ -1,0 +1,12 @@
+<MudTextField @bind-Value="Rule.IpSingleConfig!.IpAddress" Label="IP Address"
+              Variant="Variant.Outlined" Placeholder="e.g., 192.168.1.100" />
+
+@code {
+    [Parameter]
+    public FilterRule Rule { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        Rule.IpSingleConfig ??= new IpSingleConfig();
+    }
+}

@@ -5,6 +5,7 @@ using YetAnotherProxyManager.Components;
 using YetAnotherProxyManager.Data;
 using YetAnotherProxyManager.Middleware;
 using YetAnotherProxyManager.Services;
+using YetAnotherProxyManager.Services.Filtering;
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -14,6 +15,8 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File("logs/proxymanager-.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
+
+const string ManagementBasePath = "/.proxy-manager";
 
 try
 {
@@ -37,10 +40,20 @@ try
 
     // Register core services
     builder.Services.AddSingleton<ConfigurationService>();
+    builder.Services.AddSingleton<ServiceManager>();
     builder.Services.AddSingleton<AuthService>();
     builder.Services.AddSingleton<CertificateSelectorService>();
     builder.Services.AddSingleton<AcmeCertificateService>();
+    builder.Services.AddSingleton<RouteValidationService>();
     builder.Services.AddSingleton<IProxyConfigProvider, DynamicProxyConfigProvider>();
+
+    // Register filtering services
+    builder.Services.AddSingleton<IpRangeService>();
+    builder.Services.AddSingleton<FilterRuleEvaluator>();
+
+    // Register analytics services
+    builder.Services.AddSingleton<GeoLocationService>();
+    builder.Services.AddSingleton<AnalyticsService>();
 
     // Register TCP/UDP forwarding services as singletons and hosted services
     builder.Services.AddSingleton<TcpForwarderService>();
@@ -72,12 +85,6 @@ try
             });
             listenOptions.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
         });
-
-        // Management UI port (8080)
-        serverOptions.ListenAnyIP(settings.ManagementPort, listenOptions =>
-        {
-            listenOptions.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1AndHttp2;
-        });
     });
 
     // Add YARP reverse proxy
@@ -95,45 +102,39 @@ try
 
     var app = builder.Build();
 
-    // Configure the HTTP request pipeline
-    if (!app.Environment.IsDevelopment())
-    {
-        app.UseExceptionHandler("/Error");
-    }
+    // Wire up ServiceManager with ConfigurationService
+    var configService = app.Services.GetRequiredService<ConfigurationService>();
+    var serviceManager = app.Services.GetRequiredService<ServiceManager>();
+    configService.SetServiceManager(serviceManager);
 
-    // Static files for Blazor
-    app.UseStaticFiles();
-    app.UseAntiforgery();
-
-    // ACME challenge middleware - must be early in pipeline
+    // ACME challenge middleware
     app.UseAcmeChallenge();
 
-    // HTTPS redirect for routes that require it
+    // ============================================================
+    // Management UI - under /.proxy-manager
+    // ============================================================
+    app.MapWhen(
+        context => context.Request.Path.StartsWithSegments(ManagementBasePath),
+        managementApp =>
+        {
+            managementApp.UsePathBase(ManagementBasePath);
+            managementApp.UseStaticFiles();
+            managementApp.UseRouting();
+            managementApp.UseAntiforgery();
+            managementApp.UseEndpoints(endpoints =>
+            {
+                endpoints.MapRazorComponents<App>()
+                    .AddInteractiveServerRenderMode();
+            });
+        });
+
+    // ============================================================
+    // Proxy traffic - YARP only, no interference
+    // ============================================================
     app.UseConditionalHttpsRedirect();
-
-    // Branch pipeline based on port
-    app.Use(async (context, next) =>
-    {
-        var port = context.Connection.LocalPort;
-        var managementPort = settings.ManagementPort;
-
-        if (port == managementPort)
-        {
-            // Management UI - Blazor handles this
-            await next();
-        }
-        else
-        {
-            // Proxy traffic
-            await next();
-        }
-    });
-
-    // Map Blazor components for management UI
-    app.MapRazorComponents<App>()
-        .AddInteractiveServerRenderMode();
-
-    // Map YARP reverse proxy
+    app.UseAnalytics();
+    app.UseRequestFiltering();
+    app.UseRouting();
     app.MapReverseProxy();
 
     app.Run();

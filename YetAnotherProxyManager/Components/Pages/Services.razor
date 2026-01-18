@@ -1,0 +1,152 @@
+@page "/services"
+@inject ServiceManager ServiceManager
+@inject ConfigurationService ConfigService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Services - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Services</MudText>
+
+<MudPaper Class="pa-4">
+    <MudToolBar>
+        <MudTextField @bind-Value="_searchString" Placeholder="Search services..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true" />
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   Href="services/new">
+            Add Service
+        </MudButton>
+    </MudToolBar>
+
+    <MudTable Items="@FilteredServices" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Base Address</MudTh>
+            <MudTh>Endpoints</MudTh>
+            <MudTh>Source</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="width: 150px;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">
+                <MudText Typo="Typo.body1">@context.Name</MudText>
+                @if (!string.IsNullOrEmpty(context.Description))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Base Address">@context.BaseAddress</MudTd>
+            <MudTd DataLabel="Endpoints">
+                <MudChipSet T="string" ReadOnly="true">
+                    @foreach (var endpoint in context.Endpoints.Take(3))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@(endpoint.Enabled ? Color.Default : Color.Surface)">
+                            @endpoint.Name:@endpoint.Port
+                        </MudChip>
+                    }
+                    @if (context.Endpoints.Count > 3)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">+@(context.Endpoints.Count - 3) more</MudChip>
+                    }
+                </MudChipSet>
+            </MudTd>
+            <MudTd DataLabel="Source">
+                <MudChip T="string" Size="Size.Small" Color="@GetSourceColor(context.Source)">@context.Source</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudSwitch T="bool" Value="@context.Enabled" ValueChanged="@(v => ToggleEnabled(context, v))"
+                           Color="Color.Success" />
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditService(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteService(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No services configured. Services allow you to define reusable backend endpoints.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">
+    Services let you define backend servers with multiple endpoints. Routes can reference services instead of hardcoding addresses,
+    making it easier to update backends across multiple routes.
+</MudText>
+
+@code {
+    private List<Service> _services = new();
+    private string _searchString = "";
+    private bool _loading = true;
+
+    private IEnumerable<Service> FilteredServices => _services
+        .Where(s => string.IsNullOrEmpty(_searchString) ||
+                    s.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ||
+                    s.BaseAddress.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ||
+                    (s.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override void OnInitialized()
+    {
+        LoadServices();
+    }
+
+    private void LoadServices()
+    {
+        _loading = true;
+        _services = ServiceManager.GetAllServices().OrderBy(s => s.Name).ToList();
+        _loading = false;
+    }
+
+    private Color GetSourceColor(ServiceSource source) => source switch
+    {
+        ServiceSource.Manual => Color.Default,
+        ServiceSource.Docker => Color.Primary,
+        ServiceSource.Portainer => Color.Secondary,
+        ServiceSource.TrueNAS => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private void ToggleEnabled(Service service, bool enabled)
+    {
+        service.Enabled = enabled;
+        ServiceManager.SaveService(service);
+        Snackbar.Add($"Service {(enabled ? "enabled" : "disabled")}: {service.Name}", Severity.Success);
+    }
+
+    private void EditService(Service service)
+    {
+        Navigation.NavigateTo($"services/{service.Id}");
+    }
+
+    private async Task DeleteService(Service service)
+    {
+        // Check for dependent routes
+        var allRoutes = ConfigService.GetAllRoutes();
+        var (canDelete, dependentRoutes) = ServiceManager.CanDeleteService(service.Id, allRoutes);
+
+        if (!canDelete)
+        {
+            var routeList = string.Join(", ", dependentRoutes);
+            var result = await DialogService.ShowMessageBox(
+                "Service In Use",
+                $"This service is used by the following routes: {routeList}\n\nAre you sure you want to delete it? The routes will fall back to their stored addresses.",
+                yesText: "Delete Anyway",
+                cancelText: "Cancel");
+
+            if (result != true)
+                return;
+        }
+
+        if (ServiceManager.DeleteService(service.Id))
+        {
+            _services.Remove(service);
+            Snackbar.Add($"Service deleted: {service.Name}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete service", Severity.Error);
+        }
+    }
+}
