@@ -95,6 +95,28 @@ A modern web UI built with Blazor and MudBlazor featuring:
 
 ---
 
+## Roadmap
+
+Planned features for future development:
+
+### Authentication & Access
+- **User Accounts & Route Authentication** - Configurable user accounts with route-based authentication, allowing you to protect services behind a single unified login
+- **Social & SSO Integration** - Support for OAuth providers and single sign-on for seamless, streamlined access to protected routes
+
+### Diagnostics & Monitoring
+- **Route Preview & Testing** - Test internal routing to services as if requests were coming through externally, making it easy to diagnose network or connection issues without leaving the management UI
+- **Automated Event Triggers** - Configurable actions triggered by events such as service downtime, failed authentication attempts, SSL certificate errors, and more
+
+### Network Configuration
+- **Router & DNS Setup Guides** - Built-in guides to help configure network traffic routing into your reverse proxy, covering common router setups and DNS configuration
+- **Dynamic DNS Service** - Simple IP monitoring with automatic updates to Cloudflare and other DNS providers when your external IP changes
+- **Network Tunnel Support** - Easy configuration for tunneling solutions (Cloudflare Tunnel, etc.) enabling proxy access without port forwarding
+
+### Desktop Integration
+- **Native Desktop Client** - Lightweight desktop application for quickly proxying local services, managing routes, and monitoring traffic without opening a browser
+
+---
+
 ## Project Status
 
 This project is in **active early development**. Current focus areas include:
