@@ -51,7 +51,7 @@ public class AnalyticsMiddleware
 
         // Find matching route name
         var route = _configService.GetEnabledHttpRoutes()
-            .FirstOrDefault(r => r.HttpConfig?.Hosts.Contains(request.Host, StringComparer.OrdinalIgnoreCase) == true);
+            .FirstOrDefault(r => r.HttpConfig?.Hosts?.Contains(request.Host, StringComparer.OrdinalIgnoreCase) == true);
         request.RouteName = route?.Name ?? "Unknown";
 
         try

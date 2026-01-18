@@ -52,7 +52,7 @@ public class DynamicProxyConfigProvider : IProxyConfigProvider, IDisposable
 
             var match = new RouteMatch
             {
-                Hosts = route.HttpConfig.Hosts.Count > 0 ? route.HttpConfig.Hosts : null,
+                Hosts = route.HttpConfig.Hosts?.Count > 0 ? route.HttpConfig.Hosts : null,
                 Path = route.HttpConfig.PathPrefix != null ? $"{route.HttpConfig.PathPrefix}/{{**catch-all}}" : "{**catch-all}"
             };
 

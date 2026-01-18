@@ -40,7 +40,7 @@ public class RequestFilterMiddleware
 
         // Find matching route
         var route = _configService.GetEnabledHttpRoutes()
-            .FirstOrDefault(r => r.HttpConfig?.Hosts.Contains(host, StringComparer.OrdinalIgnoreCase) == true);
+            .FirstOrDefault(r => r.HttpConfig?.Hosts?.Contains(host, StringComparer.OrdinalIgnoreCase) == true);
 
         if (route == null)
         {
