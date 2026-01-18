@@ -1,0 +1,192 @@
+@page "/certificates"
+@inject ConfigurationService ConfigService
+@inject AcmeCertificateService AcmeService
+@inject ISnackbar Snackbar
+
+<PageTitle>Certificates - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">SSL Certificates</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-4">Request Let's Encrypt Certificate</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudTextField @bind-Value="_newCertDomains" Label="Domains (comma-separated)" Variant="Variant.Outlined"
+                          HelperText="e.g., example.com, www.example.com" Disabled="@_isRequesting" />
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RequestCertificate"
+                       Disabled="@(string.IsNullOrWhiteSpace(_newCertDomains) || _isRequesting)"
+                       StartIcon="@(_isRequesting ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Security)">
+                @(_isRequesting ? "Requesting..." : "Request Certificate")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (!string.IsNullOrEmpty(_requestError))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_requestError</MudAlert>
+    }
+
+    @if (!_isAcmeConfigured)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-4">
+            ACME email not configured. <MudLink Href="/settings">Configure it in Settings</MudLink> before requesting certificates.
+        </MudAlert>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-4">Installed Certificates</MudText>
+
+    <MudTable Items="@_certificates" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Domains</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Expires</MudTh>
+            <MudTh>Auto Renew</MudTh>
+            <MudTh Style="width: 100px;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Domains">
+                @foreach (var domain in context.Domains.Take(3))
+                {
+                    <MudChip T="string" Size="Size.Small">@domain</MudChip>
+                }
+                @if (context.Domains.Count > 3)
+                {
+                    <MudChip T="string" Size="Size.Small">+@(context.Domains.Count - 3) more</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Color="@(context.Type == CertificateType.LetsEncrypt ? Color.Success : Color.Info)">
+                    @context.Type
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Expires">
+                @if (context.ExpiresAt.HasValue)
+                {
+                    var daysLeft = (context.ExpiresAt.Value - DateTime.UtcNow).TotalDays;
+                    <MudText Color="@(daysLeft < 7 ? Color.Error : daysLeft < 30 ? Color.Warning : Color.Success)">
+                        @context.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd")
+                        (@((int)daysLeft) days)
+                    </MudText>
+                }
+                else
+                {
+                    <MudText>N/A</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Auto Renew">
+                <MudSwitch T="bool" Value="@context.AutoRenew" ValueChanged="@(v => ToggleAutoRenew(context, v))"
+                           Color="Color.Success" Disabled="@(context.Type != CertificateType.LetsEncrypt)" />
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteCertificate(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No certificates installed. Request a Let's Encrypt certificate or upload a custom one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+
+    @if (_certificates.Any(c => !string.IsNullOrEmpty(c.LastRenewalError)))
+    {
+        <MudText Typo="Typo.h6" Class="mt-6 mb-2">Renewal Errors</MudText>
+        @foreach (var cert in _certificates.Where(c => !string.IsNullOrEmpty(c.LastRenewalError)))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2">
+                <strong>@cert.Name:</strong> @cert.LastRenewalError
+                @if (cert.LastRenewalAttempt.HasValue)
+                {
+                    <br /><small>Last attempt: @cert.LastRenewalAttempt.Value.ToLocalTime()</small>
+                }
+            </MudAlert>
+        }
+    }
+</MudPaper>
+
+@code {
+    private List<Certificate> _certificates = new();
+    private string _newCertDomains = "";
+    private bool _isRequesting;
+    private string? _requestError;
+    private bool _isAcmeConfigured;
+
+    protected override void OnInitialized()
+    {
+        LoadCertificates();
+        var settings = ConfigService.GetSettings();
+        _isAcmeConfigured = !string.IsNullOrEmpty(settings.AcmeEmail);
+    }
+
+    private void LoadCertificates()
+    {
+        _certificates = ConfigService.GetAllCertificates().OrderBy(c => c.Name).ToList();
+    }
+
+    private async Task RequestCertificate()
+    {
+        _isRequesting = true;
+        _requestError = null;
+        StateHasChanged();
+
+        try
+        {
+            var domains = _newCertDomains
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+            if (domains.Count == 0)
+            {
+                _requestError = "Please enter at least one domain";
+                return;
+            }
+
+            var result = await AcmeService.RequestCertificateAsync(domains);
+
+            if (result.Success)
+            {
+                Snackbar.Add($"Certificate issued for: {string.Join(", ", domains)}", Severity.Success);
+                _newCertDomains = "";
+                LoadCertificates();
+            }
+            else
+            {
+                _requestError = result.Error;
+            }
+        }
+        catch (Exception ex)
+        {
+            _requestError = ex.Message;
+        }
+        finally
+        {
+            _isRequesting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleAutoRenew(Certificate cert, bool autoRenew)
+    {
+        cert.AutoRenew = autoRenew;
+        ConfigService.SaveCertificate(cert);
+        Snackbar.Add($"Auto-renew {(autoRenew ? "enabled" : "disabled")} for {cert.Name}", Severity.Success);
+    }
+
+    private void DeleteCertificate(Certificate cert)
+    {
+        if (ConfigService.DeleteCertificate(cert.Id))
+        {
+            _certificates.Remove(cert);
+            Snackbar.Add($"Certificate deleted: {cert.Name}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete certificate", Severity.Error);
+        }
+    }
+}

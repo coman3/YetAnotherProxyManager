@@ -1,0 +1,127 @@
+@page "/routes"
+@inject ConfigurationService ConfigService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Routes - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Routes</MudText>
+
+<MudPaper Class="pa-4">
+    <MudToolBar>
+        <MudTextField @bind-Value="_searchString" Placeholder="Search routes..." Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true" />
+        <MudSpacer />
+        <MudMenu Label="Add Route" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+            <MudMenuItem Href="/routes/http/new" Icon="@Icons.Material.Filled.Http">HTTP Route</MudMenuItem>
+            <MudMenuItem Href="/routes/tcp/new" Icon="@Icons.Material.Filled.Cable">TCP Forward</MudMenuItem>
+            <MudMenuItem Href="/routes/udp/new" Icon="@Icons.Material.Filled.SettingsEthernet">UDP Forward</MudMenuItem>
+        </MudMenu>
+    </MudToolBar>
+
+    <MudTable Items="@FilteredRoutes" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Details</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="width: 150px;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(context.Type)">@context.Type</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Details">@GetRouteDetails(context)</MudTd>
+            <MudTd DataLabel="Status">
+                <MudSwitch T="bool" Value="@context.Enabled" ValueChanged="@(v => ToggleEnabled(context, v))"
+                           Color="Color.Success" />
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditRoute(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteRoute(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No routes configured. Add your first route to get started.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private List<ProxyRoute> _routes = new();
+    private string _searchString = "";
+    private bool _loading = true;
+
+    private IEnumerable<ProxyRoute> FilteredRoutes => _routes
+        .Where(r => string.IsNullOrEmpty(_searchString) ||
+                    r.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ||
+                    GetRouteDetails(r).Contains(_searchString, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        LoadRoutes();
+    }
+
+    private void LoadRoutes()
+    {
+        _loading = true;
+        _routes = ConfigService.GetAllRoutes().OrderBy(r => r.Name).ToList();
+        _loading = false;
+    }
+
+    private Color GetTypeColor(RouteType type) => type switch
+    {
+        RouteType.Http => Color.Primary,
+        RouteType.Tcp => Color.Secondary,
+        RouteType.Udp => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private string GetRouteDetails(ProxyRoute route)
+    {
+        return route.Type switch
+        {
+            RouteType.Http when route.HttpConfig != null =>
+                $"{string.Join(", ", route.HttpConfig.Hosts)} -> {route.HttpConfig.Upstreams.FirstOrDefault()?.Address ?? "N/A"}",
+            RouteType.Tcp when route.StreamConfig != null =>
+                $":{route.StreamConfig.ListenPort} -> {route.StreamConfig.UpstreamHost}:{route.StreamConfig.UpstreamPort}",
+            RouteType.Udp when route.StreamConfig != null =>
+                $":{route.StreamConfig.ListenPort} -> {route.StreamConfig.UpstreamHost}:{route.StreamConfig.UpstreamPort}",
+            _ => "N/A"
+        };
+    }
+
+    private void ToggleEnabled(ProxyRoute route, bool enabled)
+    {
+        route.Enabled = enabled;
+        ConfigService.SaveRoute(route);
+        Snackbar.Add($"Route {(enabled ? "enabled" : "disabled")}: {route.Name}", Severity.Success);
+    }
+
+    private void EditRoute(ProxyRoute route)
+    {
+        var path = route.Type switch
+        {
+            RouteType.Http => $"/routes/http/{route.Id}",
+            RouteType.Tcp => $"/routes/tcp/{route.Id}",
+            RouteType.Udp => $"/routes/udp/{route.Id}",
+            _ => "/routes"
+        };
+        Navigation.NavigateTo(path);
+    }
+
+    private void DeleteRoute(ProxyRoute route)
+    {
+        if (ConfigService.DeleteRoute(route.Id))
+        {
+            _routes.Remove(route);
+            Snackbar.Add($"Route deleted: {route.Name}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete route", Severity.Error);
+        }
+    }
+}

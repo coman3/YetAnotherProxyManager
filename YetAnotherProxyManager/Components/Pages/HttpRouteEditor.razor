@@ -1,0 +1,286 @@
+@page "/routes/http/new"
+@page "/routes/http/{Id:guid}"
+@inject ConfigurationService ConfigService
+@inject AcmeCertificateService AcmeService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>@(_isNew ? "New HTTP Route" : "Edit HTTP Route") - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">@(_isNew ? "New HTTP Route" : "Edit HTTP Route")</MudText>
+
+<MudPaper Class="pa-4">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_route.Name" Label="Route Name" Required="true"
+                              RequiredError="Name is required" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_route.Enabled" Label="Enabled" Color="Color.Success" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">Host Matching</MudText>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_hostsInput" Label="Hosts (comma-separated)" Variant="Variant.Outlined"
+                              HelperText="e.g., example.com, www.example.com" Required="true"
+                              RequiredError="At least one host is required" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_httpConfig.PathPrefix" Label="Path Prefix (optional)" Variant="Variant.Outlined"
+                              HelperText="e.g., /api (leave empty to match all paths)" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 mt-4">Upstream Servers</MudText>
+            </MudItem>
+
+            @for (int i = 0; i < _httpConfig.Upstreams.Count; i++)
+            {
+                var index = i;
+                <MudItem xs="12" md="8">
+                    <MudTextField @bind-Value="_httpConfig.Upstreams[index].Address" Label="@($"Upstream {index + 1} Address")"
+                                  Variant="Variant.Outlined" HelperText="e.g., http://localhost:3000" Required="true" />
+                </MudItem>
+                <MudItem xs="12" md="2">
+                    <MudNumericField @bind-Value="_httpConfig.Upstreams[index].Weight" Label="Weight" Min="1" Max="100"
+                                     Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    @if (_httpConfig.Upstreams.Count > 1)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       OnClick="@(() => RemoveUpstream(index))" />
+                    }
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AddUpstream">
+                    Add Upstream
+                </MudButton>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_httpConfig.LoadBalancing" Label="Load Balancing" Variant="Variant.Outlined">
+                    <MudSelectItem Value="LoadBalancingPolicy.RoundRobin">Round Robin</MudSelectItem>
+                    <MudSelectItem Value="LoadBalancingPolicy.Random">Random</MudSelectItem>
+                    <MudSelectItem Value="LoadBalancingPolicy.LeastRequests">Least Requests</MudSelectItem>
+                    <MudSelectItem Value="LoadBalancingPolicy.PowerOfTwoChoices">Power of Two Choices</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_httpConfig.TimeoutSeconds" Label="Timeout (seconds)" Min="1" Max="3600"
+                                 Variant="Variant.Outlined" HelperText="Leave empty for default" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 mt-4">SSL Configuration</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudSelect T="SslMode" Value="_httpConfig.SslMode" ValueChanged="OnSslModeChanged" Label="SSL Mode" Variant="Variant.Outlined">
+                    <MudSelectItem Value="SslMode.None">None (HTTP only)</MudSelectItem>
+                    <MudSelectItem Value="SslMode.LetsEncrypt">Let's Encrypt (Auto)</MudSelectItem>
+                    <MudSelectItem Value="SslMode.Custom">Custom Certificate</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_httpConfig.ForceHttps" Label="Force HTTPS Redirect" Color="Color.Success"
+                           Disabled="@(_httpConfig.SslMode == SslMode.None)" />
+            </MudItem>
+
+            @if (_httpConfig.SslMode == SslMode.LetsEncrypt && !_isAcmeConfigured)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Warning" Class="mb-2">
+                        <MudText>ACME email is not configured. You need to configure it before requesting Let's Encrypt certificates.</MudText>
+                        <MudTextField @bind-Value="_acmeEmail" Label="ACME Email" Variant="Variant.Outlined" Class="mt-2"
+                                      HelperText="Email for Let's Encrypt notifications" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" OnClick="SaveAcmeEmail"
+                                   Disabled="@string.IsNullOrWhiteSpace(_acmeEmail)">
+                            Save Email
+                        </MudButton>
+                    </MudAlert>
+                </MudItem>
+            }
+
+            @if (_httpConfig.SslMode == SslMode.Custom)
+            {
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_httpConfig.CustomCertificateId" Label="Certificate" Variant="Variant.Outlined">
+                        @foreach (var cert in _certificates)
+                        {
+                            <MudSelectItem Value="@((Guid?)cert.Id)">@cert.Name (@string.Join(", ", cert.Domains))</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
+
+            <MudItem xs="12" Class="d-flex gap-2 mt-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save"
+                           Disabled="@(!_isValid || _isSaving || (_httpConfig.SslMode == SslMode.LetsEncrypt && !_isAcmeConfigured))">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        @_savingStatus
+                    }
+                    else
+                    {
+                        @(_isNew ? "Create Route" : "Save Changes")
+                    }
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="Cancel" Disabled="@_isSaving">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public Guid? Id { get; set; }
+
+    private ProxyRoute _route = new() { Type = RouteType.Http };
+    private HttpRouteConfig _httpConfig = new();
+    private string _hostsInput = "";
+    private bool _isNew = true;
+    private bool _isValid;
+    private MudForm? _form;
+    private List<Certificate> _certificates = new();
+    private bool _isAcmeConfigured;
+    private string _acmeEmail = "";
+    private bool _isSaving;
+    private string _savingStatus = "";
+
+    protected override void OnInitialized()
+    {
+        _certificates = ConfigService.GetAllCertificates().ToList();
+        var settings = ConfigService.GetSettings();
+        _isAcmeConfigured = !string.IsNullOrEmpty(settings.AcmeEmail);
+        _acmeEmail = settings.AcmeEmail ?? "";
+
+        if (Id.HasValue)
+        {
+            var existing = ConfigService.GetRoute(Id.Value);
+            if (existing != null && existing.Type == RouteType.Http)
+            {
+                _route = existing;
+                _httpConfig = existing.HttpConfig ?? new HttpRouteConfig();
+                _hostsInput = string.Join(", ", _httpConfig.Hosts);
+                _isNew = false;
+            }
+        }
+
+        if (_httpConfig.Upstreams.Count == 0)
+        {
+            _httpConfig.Upstreams.Add(new UpstreamServer());
+        }
+    }
+
+    private void OnSslModeChanged(SslMode newMode)
+    {
+        _httpConfig.SslMode = newMode;
+
+        if (newMode == SslMode.LetsEncrypt)
+        {
+            _httpConfig.ForceHttps = true;
+        }
+    }
+
+    private void SaveAcmeEmail()
+    {
+        if (string.IsNullOrWhiteSpace(_acmeEmail))
+            return;
+
+        var settings = ConfigService.GetSettings();
+        settings.AcmeEmail = _acmeEmail;
+        ConfigService.SaveSettings(settings);
+        _isAcmeConfigured = true;
+        Snackbar.Add("ACME email saved", Severity.Success);
+        StateHasChanged();
+    }
+
+    private void AddUpstream()
+    {
+        _httpConfig.Upstreams.Add(new UpstreamServer());
+    }
+
+    private void RemoveUpstream(int index)
+    {
+        if (_httpConfig.Upstreams.Count > 1)
+        {
+            _httpConfig.Upstreams.RemoveAt(index);
+        }
+    }
+
+    private async Task Save()
+    {
+        _httpConfig.Hosts = _hostsInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        _route.HttpConfig = _httpConfig;
+
+        // If Let's Encrypt is selected, check if we need to create certificates
+        if (_httpConfig.SslMode == SslMode.LetsEncrypt && _httpConfig.Hosts.Count > 0)
+        {
+            var domainsNeedingCerts = new List<string>();
+
+            foreach (var host in _httpConfig.Hosts)
+            {
+                var existingCert = ConfigService.GetCertificateByDomain(host);
+                if (existingCert == null)
+                {
+                    domainsNeedingCerts.Add(host);
+                }
+            }
+
+            if (domainsNeedingCerts.Count > 0)
+            {
+                _isSaving = true;
+                _savingStatus = "Requesting certificate...";
+                StateHasChanged();
+
+                try
+                {
+                    var result = await AcmeService.RequestCertificateAsync(domainsNeedingCerts);
+
+                    if (!result.Success)
+                    {
+                        Snackbar.Add($"Certificate request failed: {result.Error}", Severity.Error);
+                        _isSaving = false;
+                        StateHasChanged();
+                        return;
+                    }
+
+                    Snackbar.Add($"Certificate issued for: {string.Join(", ", domainsNeedingCerts)}", Severity.Success);
+                }
+                catch (Exception ex)
+                {
+                    Snackbar.Add($"Certificate request failed: {ex.Message}", Severity.Error);
+                    _isSaving = false;
+                    StateHasChanged();
+                    return;
+                }
+            }
+        }
+
+        _isSaving = true;
+        _savingStatus = "Saving route...";
+        StateHasChanged();
+
+        ConfigService.SaveRoute(_route);
+        Snackbar.Add($"Route saved: {_route.Name}", Severity.Success);
+        Navigation.NavigateTo("/routes");
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/routes");
+    }
+}

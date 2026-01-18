@@ -1,0 +1,107 @@
+@page "/routes/udp/new"
+@page "/routes/udp/{Id:guid}"
+@inject ConfigurationService ConfigService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_isNew ? "New UDP Forward" : "Edit UDP Forward") - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">@(_isNew ? "New UDP Forward" : "Edit UDP Forward")</MudText>
+
+<MudPaper Class="pa-4">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_route.Name" Label="Forward Name" Required="true"
+                              RequiredError="Name is required" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_route.Enabled" Label="Enabled" Color="Color.Success" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">Listen Configuration</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_streamConfig.ListenPort" Label="Listen Port" Required="true"
+                                 RequiredError="Listen port is required" Min="1" Max="65535" Variant="Variant.Outlined"
+                                 HelperText="Port to listen on for incoming packets" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 mt-4">Upstream Configuration</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_streamConfig.UpstreamHost" Label="Upstream Host" Required="true"
+                              RequiredError="Upstream host is required" Variant="Variant.Outlined"
+                              HelperText="e.g., 192.168.1.100 or server.local" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_streamConfig.UpstreamPort" Label="Upstream Port" Required="true"
+                                 RequiredError="Upstream port is required" Min="1" Max="65535" Variant="Variant.Outlined" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2 mt-4">Advanced Settings</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_streamConfig.TimeoutSeconds" Label="Session Timeout (seconds)" Min="1" Max="3600"
+                                 Variant="Variant.Outlined" HelperText="UDP session timeout (default: 60)" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudNumericField @bind-Value="_streamConfig.BufferSize" Label="Buffer Size (bytes)" Min="512" Max="65536"
+                                 Variant="Variant.Outlined" HelperText="Packet buffer size (default: 8192)" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex gap-2 mt-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="@(!_isValid)">
+                    @(_isNew ? "Create Forward" : "Save Changes")
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public Guid? Id { get; set; }
+
+    private ProxyRoute _route = new() { Type = RouteType.Udp };
+    private StreamRouteConfig _streamConfig = new() { BufferSize = 8192 };
+    private bool _isNew = true;
+    private bool _isValid;
+    private MudForm? _form;
+
+    protected override void OnInitialized()
+    {
+        if (Id.HasValue)
+        {
+            var existing = ConfigService.GetRoute(Id.Value);
+            if (existing != null && existing.Type == RouteType.Udp)
+            {
+                _route = existing;
+                _streamConfig = existing.StreamConfig ?? new StreamRouteConfig { BufferSize = 8192 };
+                _isNew = false;
+            }
+        }
+    }
+
+    private void Save()
+    {
+        _route.StreamConfig = _streamConfig;
+        ConfigService.SaveRoute(_route);
+        Snackbar.Add($"UDP forward saved: {_route.Name}", Severity.Success);
+        Navigation.NavigateTo("/routes");
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/routes");
+    }
+}

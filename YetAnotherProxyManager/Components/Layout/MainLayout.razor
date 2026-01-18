@@ -1,0 +1,178 @@
+@inherits LayoutComponentBase
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<MudLayout>
+    @if (_isAuthenticated || !_passwordConfigured)
+    {
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+            <MudText Typo="Typo.h6" Class="ml-3">YetAnotherProxyManager</MudText>
+            <MudSpacer />
+            @if (_isAuthenticated)
+            {
+                <MudTooltip Text="Logout">
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" OnClick="Logout" />
+                </MudTooltip>
+            }
+        </MudAppBar>
+        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+            <NavMenu />
+        </MudDrawer>
+        <MudMainContent Class="pt-16 px-4">
+            @if (!_passwordConfigured)
+            {
+                <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h5" Class="mb-4">Initial Setup</MudText>
+                        <MudText Class="mb-4">Welcome! Please set a password to secure the management interface.</MudText>
+                        <MudTextField @bind-Value="_newPassword" Label="Password" InputType="InputType.Password"
+                                      Variant="Variant.Outlined" Class="mb-2" HelperText="Minimum 8 characters" />
+                        <MudTextField @bind-Value="_confirmPassword" Label="Confirm Password" InputType="InputType.Password"
+                                      Variant="Variant.Outlined" Class="mb-4" />
+                        @if (!string.IsNullOrEmpty(_setupError))
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mb-4">@_setupError</MudAlert>
+                        }
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="SetInitialPassword">
+                            Set Password
+                        </MudButton>
+                    </MudPaper>
+                </MudContainer>
+            }
+            else
+            {
+                @Body
+            }
+        </MudMainContent>
+    }
+    else
+    {
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="d-flex align-center" Style="height: 100vh;">
+                <MudPaper Class="pa-4 w-100">
+                    <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">Login</MudText>
+                    <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password"
+                                  Variant="Variant.Outlined" Class="mb-4" OnKeyUp="OnPasswordKeyUp" />
+                    @if (!string.IsNullOrEmpty(_loginError))
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-4">@_loginError</MudAlert>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="Login">
+                        Login
+                    </MudButton>
+                </MudPaper>
+            </MudContainer>
+        </MudMainContent>
+    }
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _passwordConfigured;
+    private bool _isAuthenticated;
+    private string _password = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private string? _loginError;
+    private string? _setupError;
+    private string? _sessionId;
+
+    protected override void OnInitialized()
+    {
+        _passwordConfigured = AuthService.IsPasswordConfigured();
+
+        // Check session from cookie
+        var cookies = HttpContextAccessor.HttpContext?.Request.Cookies;
+        if (cookies != null && cookies.TryGetValue("session", out var sessionId))
+        {
+            _sessionId = sessionId;
+            _isAuthenticated = AuthService.ValidateSession(sessionId);
+        }
+    }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private async Task OnPasswordKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Login();
+        }
+    }
+
+    private async Task Login()
+    {
+        _loginError = null;
+
+        if (AuthService.ValidatePassword(_password))
+        {
+            _sessionId = AuthService.CreateSession();
+            _isAuthenticated = true;
+
+            // Set cookie via JS interop would be needed for a real implementation
+            // For now, we store in memory
+            StateHasChanged();
+        }
+        else
+        {
+            _loginError = "Invalid password";
+        }
+
+        _password = "";
+        await Task.CompletedTask;
+    }
+
+    private void Logout()
+    {
+        if (_sessionId != null)
+        {
+            AuthService.InvalidateSession(_sessionId);
+        }
+        _isAuthenticated = false;
+        _sessionId = null;
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private void SetInitialPassword()
+    {
+        _setupError = null;
+
+        if (string.IsNullOrWhiteSpace(_newPassword))
+        {
+            _setupError = "Password is required";
+            return;
+        }
+
+        if (_newPassword.Length < 8)
+        {
+            _setupError = "Password must be at least 8 characters";
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            _setupError = "Passwords do not match";
+            return;
+        }
+
+        if (AuthService.SetPassword(_newPassword))
+        {
+            _passwordConfigured = true;
+            _sessionId = AuthService.CreateSession();
+            _isAuthenticated = true;
+            StateHasChanged();
+        }
+        else
+        {
+            _setupError = "Failed to set password";
+        }
+
+        _newPassword = "";
+        _confirmPassword = "";
+    }
+}

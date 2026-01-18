@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- YARP Reverse Proxy -->
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.*" />
+
+    <!-- Database -->
+    <PackageReference Include="LiteDB" Version="5.*" />
+
+    <!-- ACME/Let's Encrypt -->
+    <PackageReference Include="Certes" Version="3.*" />
+
+    <!-- Blazor UI Components -->
+    <PackageReference Include="MudBlazor" Version="8.*" />
+
+    <!-- Logging -->
+    <PackageReference Include="Serilog.AspNetCore" Version="9.*" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.*" />
+  </ItemGroup>
+
+</Project>

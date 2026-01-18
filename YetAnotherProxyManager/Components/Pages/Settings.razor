@@ -1,0 +1,179 @@
+@page "/settings"
+@inject ConfigurationService ConfigService
+@inject AuthService AuthService
+@inject ISnackbar Snackbar
+
+<PageTitle>Settings - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Let's Encrypt / ACME</MudText>
+
+            <MudTextField @bind-Value="_settings.AcmeEmail" Label="ACME Email" Variant="Variant.Outlined" Class="mb-4"
+                          HelperText="Email used for Let's Encrypt account and notifications" />
+
+            <MudSwitch @bind-Value="_settings.UseAcmeStaging" Label="Use Staging Environment" Color="Color.Warning" Class="mb-4" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4">
+                Enable staging for testing. Staging certificates are not trusted by browsers but have higher rate limits.
+            </MudText>
+
+            <MudNumericField @bind-Value="_settings.CertificateRenewalDays" Label="Renew Certificates (days before expiry)"
+                             Min="1" Max="60" Variant="Variant.Outlined" Class="mb-4" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAcmeSettings">
+                Save ACME Settings
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Port Configuration</MudText>
+
+            <MudNumericField @bind-Value="_settings.HttpPort" Label="HTTP Port" Min="1" Max="65535"
+                             Variant="Variant.Outlined" Class="mb-4" HelperText="Default: 80" />
+
+            <MudNumericField @bind-Value="_settings.HttpsPort" Label="HTTPS Port" Min="1" Max="65535"
+                             Variant="Variant.Outlined" Class="mb-4" HelperText="Default: 443" />
+
+            <MudNumericField @bind-Value="_settings.ManagementPort" Label="Management UI Port" Min="1" Max="65535"
+                             Variant="Variant.Outlined" Class="mb-4" HelperText="Default: 8080" />
+
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                Changing ports requires an application restart to take effect.
+            </MudAlert>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePortSettings">
+                Save Port Settings
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Change Password</MudText>
+
+            <MudTextField @bind-Value="_currentPassword" Label="Current Password" InputType="InputType.Password"
+                          Variant="Variant.Outlined" Class="mb-4" />
+
+            <MudTextField @bind-Value="_newPassword" Label="New Password" InputType="InputType.Password"
+                          Variant="Variant.Outlined" Class="mb-2" HelperText="Minimum 8 characters" />
+
+            <MudTextField @bind-Value="_confirmPassword" Label="Confirm New Password" InputType="InputType.Password"
+                          Variant="Variant.Outlined" Class="mb-4" />
+
+            @if (!string.IsNullOrEmpty(_passwordError))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">@_passwordError</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ChangePassword">
+                Change Password
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Logging</MudText>
+
+            <MudSwitch @bind-Value="_settings.EnableAccessLog" Label="Enable Access Log" Color="Color.Success" Class="mb-4" />
+
+            <MudTextField @bind-Value="_settings.DataPath" Label="Data Path" Variant="Variant.Outlined" Class="mb-4"
+                          HelperText="Path where database and certificates are stored" Disabled="true" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveLoggingSettings">
+                Save Logging Settings
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Session Management</MudText>
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="InvalidateAllSessions"
+                       StartIcon="@Icons.Material.Filled.Logout">
+                Invalidate All Sessions
+            </MudButton>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-4">
+                This will log out all users from the management interface.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private AppSettings _settings = new();
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private string? _passwordError;
+
+    protected override void OnInitialized()
+    {
+        _settings = ConfigService.GetSettings();
+    }
+
+    private void SaveAcmeSettings()
+    {
+        ConfigService.SaveSettings(_settings);
+        Snackbar.Add("ACME settings saved", Severity.Success);
+    }
+
+    private void SavePortSettings()
+    {
+        ConfigService.SaveSettings(_settings);
+        Snackbar.Add("Port settings saved. Restart required to apply.", Severity.Warning);
+    }
+
+    private void SaveLoggingSettings()
+    {
+        ConfigService.SaveSettings(_settings);
+        Snackbar.Add("Logging settings saved", Severity.Success);
+    }
+
+    private void ChangePassword()
+    {
+        _passwordError = null;
+
+        if (!AuthService.ValidatePassword(_currentPassword))
+        {
+            _passwordError = "Current password is incorrect";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPassword) || _newPassword.Length < 8)
+        {
+            _passwordError = "New password must be at least 8 characters";
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordError = "New passwords do not match";
+            return;
+        }
+
+        if (AuthService.SetPassword(_newPassword))
+        {
+            _currentPassword = "";
+            _newPassword = "";
+            _confirmPassword = "";
+            Snackbar.Add("Password changed successfully", Severity.Success);
+        }
+        else
+        {
+            _passwordError = "Failed to change password";
+        }
+    }
+
+    private void InvalidateAllSessions()
+    {
+        AuthService.InvalidateAllSessions();
+        Snackbar.Add("All sessions invalidated", Severity.Info);
+    }
+}

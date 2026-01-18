@@ -1,0 +1,110 @@
+@page "/"
+@inject ConfigurationService ConfigService
+@inject TcpForwarderService TcpService
+@inject UdpForwarderService UdpService
+
+<PageTitle>Dashboard - YetAnotherProxyManager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Http" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_httpRouteCount</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">HTTP Routes</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_tcpRouteCount</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">TCP Forwards</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.SettingsEthernet" Size="Size.Large" Color="Color.Tertiary" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_udpRouteCount</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">UDP Forwards</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4 d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Large" Color="Color.Success" />
+            <MudText Typo="Typo.h4" Class="mt-2">@_certificateCount</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">SSL Certificates</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-6 mb-4">Active Connections</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">TCP Connections</MudText>
+            <MudText Typo="Typo.h3" Color="Color.Primary">@_tcpConnections</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">UDP Packets Forwarded</MudText>
+            <MudText Typo="Typo.h3" Color="Color.Secondary">@_udpPackets</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-6 mb-4">Quick Actions</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Href="/routes/http/new"
+                   StartIcon="@Icons.Material.Filled.Add">
+            Add HTTP Route
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true" Href="/routes/tcp/new"
+                   StartIcon="@Icons.Material.Filled.Add">
+            Add TCP Forward
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" FullWidth="true" Href="/routes/udp/new"
+                   StartIcon="@Icons.Material.Filled.Add">
+            Add UDP Forward
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudButton Variant="Variant.Outlined" Color="Color.Success" FullWidth="true" Href="/certificates"
+                   StartIcon="@Icons.Material.Filled.Security">
+            Manage Certificates
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private int _httpRouteCount;
+    private int _tcpRouteCount;
+    private int _udpRouteCount;
+    private int _certificateCount;
+    private int _tcpConnections;
+    private long _udpPackets;
+
+    protected override void OnInitialized()
+    {
+        RefreshStats();
+    }
+
+    private void RefreshStats()
+    {
+        var routes = ConfigService.GetAllRoutes().ToList();
+        _httpRouteCount = routes.Count(r => r.Type == RouteType.Http && r.Enabled);
+        _tcpRouteCount = routes.Count(r => r.Type == RouteType.Tcp && r.Enabled);
+        _udpRouteCount = routes.Count(r => r.Type == RouteType.Udp && r.Enabled);
+        _certificateCount = ConfigService.GetAllCertificates().Count();
+        _tcpConnections = TcpService.GetActiveConnectionCount();
+        _udpPackets = UdpService.GetTotalPacketsForwarded();
+    }
+}

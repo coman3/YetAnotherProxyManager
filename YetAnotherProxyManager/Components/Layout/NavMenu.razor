@@ -1,0 +1,13 @@
+@inject NavigationManager Navigation
+
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+    <MudNavGroup Title="Routes" Icon="@Icons.Material.Filled.AltRoute" Expanded="true">
+        <MudNavLink Href="/routes" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.List">All Routes</MudNavLink>
+        <MudNavLink Href="/routes/http/new" Icon="@Icons.Material.Filled.Http">New HTTP Route</MudNavLink>
+        <MudNavLink Href="/routes/tcp/new" Icon="@Icons.Material.Filled.Cable">New TCP Forward</MudNavLink>
+        <MudNavLink Href="/routes/udp/new" Icon="@Icons.Material.Filled.SettingsEthernet">New UDP Forward</MudNavLink>
+    </MudNavGroup>
+    <MudNavLink Href="/certificates" Icon="@Icons.Material.Filled.Security">Certificates</MudNavLink>
+    <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+</MudNavMenu>
