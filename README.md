@@ -113,6 +113,24 @@ Planned features for future development:
 - **User Accounts & Route Authentication** - Configurable user accounts with route-based authentication, allowing you to protect services behind a single unified login
 - **Social & SSO Integration** - Support for OAuth providers and single sign-on for seamless, streamlined access to protected routes
 
+### Service Templates
+Pre-configured routing templates optimized for popular self-hosted applications, eliminating guesswork and manual configuration:
+
+| Service | Template Includes |
+|---------|-------------------|
+| **Plex** | WebSocket support, larger buffer sizes, extended timeouts for streaming |
+| **Jellyfin / Emby** | WebSocket support, streaming-optimized settings |
+| **Sonarr / Radarr / Lidarr** | Base path or subdomain options, API proxy settings |
+| **Overseer / Ombi** | Root URL configuration, request forwarding |
+| **Home Assistant** | WebSocket support, long-polling timeouts |
+| **Nextcloud** | Large upload support, extended timeouts, CalDAV/CardDAV headers |
+
+Template features:
+- Choose between subdomain routing (`plex.domain.com`) or base path routing (`domain.com/plex`)
+- Automatic configuration of protocol-specific settings (WebSockets, SSE, etc.)
+- Sensible defaults for buffer sizes, timeouts, and retry policies per service type
+- Community-contributed templates for additional services
+
 ### Diagnostics & Monitoring
 - **Route Preview & Testing** - Test internal routing to services as if requests were coming through externally, making it easy to diagnose network or connection issues without leaving the management UI
 - **Automated Event Triggers** - Configurable actions triggered by events such as service downtime, failed authentication attempts, SSL certificate errors, and more
