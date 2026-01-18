@@ -6,6 +6,16 @@ A modern, feature-rich reverse proxy manager built with ASP.NET Core and YARP, d
 
 ---
 
+## Before Release
+
+- [ ] Build and automate ultra-slim Docker containers
+- [ ] Create one-click deploy configurations for TrueNAS Scale, Unraid, etc.
+- [ ] Implement automated testing suite
+- [ ] Battle test in real-world environments
+- [ ] Public release
+
+---
+
 ## Overview
 
 YetAnotherProxyManager (YAPM) aims to provide enterprise-grade reverse proxy capabilities through a clean, user-friendly web interface. Built on Microsoft's YARP (Yet Another Reverse Proxy), it combines powerful routing features with automated LetsEncrypt SSL management, real-time analytics, and sophisticated access control-all in a single, self-contained application.
