@@ -1,4 +1,6 @@
 bin/
 obj/
 logs/
-**.db
+*.db
+.claude/
+.vscode/
